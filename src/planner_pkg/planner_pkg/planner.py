@@ -6,6 +6,26 @@ from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
 from rclpy.clock import Duration
 from turtlebot4_navigation.turtlebot4_navigator import TurtleBot4Directions, TurtleBot4Navigator
 
+import time
+from geometry_msgs.msg import PoseWithCovarianceStamped
+
+class PoseSubscriber(Node):
+
+    def __init__(self):
+        super().__init__('pose_subscriber')
+        self.subscription = self.create_subscription(
+            PoseWithCovarianceStamped,
+            '/initialpose',
+            self.listener_callback,
+            10)
+        self.subscription
+
+    def listener_callback(self, msg):
+        pose = msg.pose.pose
+        self.get_logger().info('Received 2D Pose Estimate: %f, %f, %f' % (pose.position.x, pose.position.y, pose.orientation.z))
+
+
+
 def get_next_pose(current_pose, direction):
     x, y, z = current_pose.pose.position.x, current_pose.pose.position.y, current_pose.pose.position.z
     qx, qy, qz, qw = current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z, current_pose.pose.orientation.w
@@ -21,6 +41,19 @@ def get_next_pose(current_pose, direction):
 
 def main():
     rclpy.init()
+    
+
+    # rclpy.init(args=args)
+
+    # pose_subscriber = PoseSubscriber()
+
+    # # Create a MultiThreadedExecutor with 4 threads
+    # executor = MultiThreadedExecutor(num_threads=1)
+    # executor.add_node(pose_subscriber)
+
+    # pose_subscriber.destroy_node()
+    # rclpy.shutdown()
+
 
     navigator = TurtleBot4Navigator()
 
@@ -32,7 +65,7 @@ def main():
     finished = False
     
     # Set initial pose
-    initial_pose = navigator.getPoseStamped([0.0, 0.0], TurtleBot4Directions.NORTH) # TODO: The initial pose will be given dynamically
+    initial_pose = navigator.getPoseStamped([10.0, 10.0], TurtleBot4Directions.NORTH) # TODO: The initial pose will be given dynamically
     navigator.setInitialPose(initial_pose)
 
     # Wait for Nav2
@@ -45,10 +78,10 @@ def main():
         direction = navigator.getNextDirection(current_pose)
         
         # Print the pose
-        navigator.info(f'Current pose: {current_pose}')
+        #navigator.info(f'Current pose: {current_pose}')
         # Print the direction
-        navigator.info(f'Next direction: {direction}')
-
+        #navigator.info(f'Next direction: {direction}')
+        time.sleep(1)
         navigator.startToPose(get_next_pose(current_pose, direction))
 
         
