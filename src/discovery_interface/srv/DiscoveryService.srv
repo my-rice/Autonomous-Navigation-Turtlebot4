@@ -1,4 +1,6 @@
-int64 actual_pos
+float64 goal_pose_x
+float64 goal_pose_y
+int64 angle
 ---
-int64 next_goal
+string next_action
 
