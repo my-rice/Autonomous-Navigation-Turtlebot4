@@ -1,79 +1,54 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.logging import LoggingSeverity
-from geometry_msgs.msg import Twist
-from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
-from rclpy.clock import Duration
+from rclpy.executors import MultiThreadedExecutor  # Import MultiThreadedExecutor
+from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
+from nav_msgs.msg import Odometry
+import time
 from turtlebot4_navigation.turtlebot4_navigator import TurtleBot4Directions, TurtleBot4Navigator
 
-def get_next_pose(current_pose, direction):
-    x, y, z = current_pose.pose.position.x, current_pose.pose.position.y, current_pose.pose.position.z
-    qx, qy, qz, qw = current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z, current_pose.pose.orientation.w
-    if direction == TurtleBot4Directions.NORTH:
-        y += 1
-    elif direction == TurtleBot4Directions.EAST:
-        x += 1
-    elif direction == TurtleBot4Directions.SOUTH:
-        y -= 1
-    elif direction == TurtleBot4Directions.WEST:
-        x -= 1
-    return TurtleBot4Navigator.getPoseStamped([x, y], direction)
 
-def main():
-    rclpy.init()
+class InfoHandler(Node):
 
-    navigator = TurtleBot4Navigator()
+    def __init__(self):
+        super().__init__("Info") #Init node
+        self.sub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
+        self.amcl_pose = None    
+        self.finished = False
 
-    # Start on dock 
-    #if not navigator.getDockedStatus():
-    #    navigator.info('Docking before initialising pose')
-    #    navigator.dock()
+        self.navigator = TurtleBot4Navigator()
+        self.run()
 
-    finished = False
+    def pose_callback(self, msg):
+        self.amcl_pose = msg
+        self.get_logger().info(f"Pose: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
+
     
-    # Set initial pose
-    initial_pose = navigator.getPoseStamped([0.0, 0.0], TurtleBot4Directions.NORTH) # TODO: The initial pose will be given dynamically
-    navigator.setInitialPose(initial_pose)
+    def run(self):
+        while not self.finished:
+            if self.amcl_pose is not None:
+                self.get_logger().info(f"Pose: {self.amcl_pose.pose.pose.position.x}, {self.amcl_pose.pose.pose.position.y}")
+            else:
+                self.get_logger().info("Pose not available")
+            time.sleep(1)
 
-    # Wait for Nav2
-    navigator.waitUntilNav2Active()
 
 
-    while not finished: # TODO: The condition to finish the navigation will be given dynamically
-        current_pose = navigator.getPose()
-        # Get the next direction to move
-        direction = navigator.getNextDirection(current_pose)
-        
-        # Print the pose
-        navigator.info(f'Current pose: {current_pose}')
-        # Print the direction
-        navigator.info(f'Next direction: {direction}')
 
-        navigator.startToPose(get_next_pose(current_pose, direction))
 
-        
+def main(args=None):
+    rclpy.init(args=args)
 
-    # Set goal poses
-    # goal_poses = []
-    # goal_poses.append(navigator.getPoseStamped([1.0, 0.0], TurtleBot4Directions.NORTH))
-    # goal_poses.append(navigator.getPoseStamped([2.0, 0.0], TurtleBot4Directions.EAST))
-    # goal_poses.append(navigator.getPoseStamped([2.0, -1.0], TurtleBot4Directions.NORTH))
-    # goal_poses.append(navigator.getPoseStamped([3.0, -1.0], TurtleBot4Directions.WEST))
-    # goal_poses.append(navigator.getPoseStamped([3.0, 0.0], TurtleBot4Directions.WEST))
-    # goal_poses.append(navigator.getPoseStamped([3.0, 1.0], TurtleBot4Directions.WEST))
+    executor = MultiThreadedExecutor()
 
-    # # Undock
-    # #navigator.undock()
+    info = InfoHandler()
 
-    # # Navigate through poses
-    # for goal_pose in goal_poses:
-    #     input("Press any key to continue...")
-    #     navigator.startToPose(goal_pose)
 
-    # Finished navigating, dock
-    #navigator.dock()
+    executor.add_node(info)
 
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+
+    info.destroy_node()
     rclpy.shutdown()
-
-if __name__ == '__main__':
-    main()
