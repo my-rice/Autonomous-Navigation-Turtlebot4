@@ -1,112 +1,74 @@
 import rclpy
 from rclpy.node import Node
-from rclpy.logging import LoggingSeverity
-from geometry_msgs.msg import Twist
-from rclpy.executors import MultiThreadedExecutor, SingleThreadedExecutor
-from rclpy.clock import Duration
+from rclpy.executors import MultiThreadedExecutor  # Import MultiThreadedExecutor
+from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
+from nav_msgs.msg import Odometry
+import time
 from turtlebot4_navigation.turtlebot4_navigator import TurtleBot4Directions, TurtleBot4Navigator
 
-import time
-from geometry_msgs.msg import PoseWithCovarianceStamped
 
-class PoseSubscriber(Node):
+class InfoHandler(Node):
 
     def __init__(self):
-        super().__init__('pose_subscriber')
-        self.subscription = self.create_subscription(
-            PoseWithCovarianceStamped,
-            '/initialpose',
-            self.listener_callback,
-            10)
-        self.subscription
+        super().__init__("Info") #Init node
+        self.sub_odom = self.create_subscription(Odometry, "/odom", self.odom_callback, 10) # INUTILE
+        #self.sub_pose = self.create_subscription(PoseWithCovarianceStamped, "/initialpose", self.pose_callback, 10)
+        self.amcl_pose = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
+        
+        self.pose = None
+        self.amcl_pose = None
+        self.odom = None
+        self.finished = False
 
-    def listener_callback(self, msg):
-        pose = msg.pose.pose
-        self.get_logger().info('Received 2D Pose Estimate: %f, %f, %f' % (pose.position.x, pose.position.y, pose.orientation.z))
+        self.loop()
+    
+    def pose_callback(self, msg):
+        self.amcl_pose = msg
+        self.get_logger().info(f"Pose: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
 
 
-
-def get_next_pose(current_pose, direction):
-    x, y, z = current_pose.pose.position.x, current_pose.pose.position.y, current_pose.pose.position.z
-    qx, qy, qz, qw = current_pose.pose.orientation.x, current_pose.pose.orientation.y, current_pose.pose.orientation.z, current_pose.pose.orientation.w
-    if direction == TurtleBot4Directions.NORTH:
-        y += 1
-    elif direction == TurtleBot4Directions.EAST:
-        x += 1
-    elif direction == TurtleBot4Directions.SOUTH:
-        y -= 1
-    elif direction == TurtleBot4Directions.WEST:
-        x -= 1
-    return TurtleBot4Navigator.getPoseStamped([x, y], direction)
-
-def main():
-    rclpy.init()
+    
+    def odom_callback(self, msg):
+        self.odom = msg
+        self.get_logger().info(f"Odometry: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
     
 
-    # rclpy.init(args=args)
 
-    # pose_subscriber = PoseSubscriber()
+    def loop(self):
 
-    # # Create a MultiThreadedExecutor with 4 threads
-    # executor = MultiThreadedExecutor(num_threads=1)
-    # executor.add_node(pose_subscriber)
+        navigator = TurtleBot4Navigator()
 
-    # pose_subscriber.destroy_node()
-    # rclpy.shutdown()
-
-
-    navigator = TurtleBot4Navigator()
-
-    # Start on dock 
-    #if not navigator.getDockedStatus():
-    #    navigator.info('Docking before initialising pose')
-    #    navigator.dock()
-
-    finished = False
-    
-    # Set initial pose
-    initial_pose = navigator.getPoseStamped([10.0, 10.0], TurtleBot4Directions.NORTH) # TODO: The initial pose will be given dynamically
-    navigator.setInitialPose(initial_pose)
-
-    # Wait for Nav2
-    navigator.waitUntilNav2Active()
-
-
-    while not finished: # TODO: The condition to finish the navigation will be given dynamically
-        current_pose = navigator.getPose()
-        # Get the next direction to move
-        direction = navigator.getNextDirection(current_pose)
+        finished = False
         
-        # Print the pose
-        #navigator.info(f'Current pose: {current_pose}')
-        # Print the direction
-        #navigator.info(f'Next direction: {direction}')
-        time.sleep(1)
-        navigator.startToPose(get_next_pose(current_pose, direction))
+        # Set initial pose
+        # initial_pose = navigator.getPoseStamped([0.0, 0.0], TurtleBot4Directions.NORTH) # TODO: The initial pose will be given dynamically
+        # navigator.setInitialPose(initial_pose)
 
-        
+        # Wait for Nav2
+        #navigator.waitUntilNav2Active()
 
-    # Set goal poses
-    # goal_poses = []
-    # goal_poses.append(navigator.getPoseStamped([1.0, 0.0], TurtleBot4Directions.NORTH))
-    # goal_poses.append(navigator.getPoseStamped([2.0, 0.0], TurtleBot4Directions.EAST))
-    # goal_poses.append(navigator.getPoseStamped([2.0, -1.0], TurtleBot4Directions.NORTH))
-    # goal_poses.append(navigator.getPoseStamped([3.0, -1.0], TurtleBot4Directions.WEST))
-    # goal_poses.append(navigator.getPoseStamped([3.0, 0.0], TurtleBot4Directions.WEST))
-    # goal_poses.append(navigator.getPoseStamped([3.0, 1.0], TurtleBot4Directions.WEST))
 
-    # # Undock
-    # #navigator.undock()
+        while not self.finished:
+            if self.amcl_pose is not None:
+                self.get_logger().info("self.acml_pose is not None", self.amcl_pose)
+            else:
+                self.get_logger().info("Planning...")
+            time.sleep(2)
 
-    # # Navigate through poses
-    # for goal_pose in goal_poses:
-    #     input("Press any key to continue...")
-    #     navigator.startToPose(goal_pose)
 
-    # Finished navigating, dock
-    #navigator.dock()
 
+def main(args=None):
+    rclpy.init(args=args)
+
+    executor = MultiThreadedExecutor()
+
+    info = InfoHandler()
+
+    executor.add_node(info)
+    try:
+        executor.spin()
+    except KeyboardInterrupt:
+        pass
+
+    info.destroy_node()
     rclpy.shutdown()
-
-if __name__ == '__main__':
-    main()
