@@ -1,7 +1,7 @@
 import subprocess
 import time
 
-subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', 'killall -9 ros2; colcon build;'])
+subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', 'colcon build;'])
 time.sleep(2)
 
 commands = [
