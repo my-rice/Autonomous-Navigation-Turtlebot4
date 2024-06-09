@@ -1,3 +1,2 @@
 policy:
   array_based: true
-  radius: 0.5
