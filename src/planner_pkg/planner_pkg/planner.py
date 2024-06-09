@@ -21,13 +21,21 @@ class PlannerHandler(Node):
         self.amcl_pose = None
         self.nav_thread = None
         self.navigator = TurtleBot4Navigator()
-
+        self.initial_pose_flag = False
         # Wait for Nav2
         self.navigator.waitUntilNav2Active()
 
 
         self.build_p_map()
         # Wait for the initial pose
+
+        while self.initial_pose_flag == False:
+            # get the confirmation that the initial pose has been set by the user in rviz
+            self.get_logger().info("Waiting for the initial pose")
+            input("Press Enter to confirm the initial pose")
+            self.initial_pose_flag = True
+            self.get_logger().info("Initial pose set")
+
         while self.amcl_pose is None:
             self.get_logger().info("Waiting for the initial pose")
             rclpy.spin_once(self)
@@ -46,6 +54,7 @@ class PlannerHandler(Node):
     def pose_callback(self, msg):
         self.amcl_pose = msg
         self.get_logger().info(f"Pose callback: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
+        
 
 
     def build_p_map(self):
@@ -127,7 +136,7 @@ class PlannerHandler(Node):
 
     def run(self):
         
-        if self.amcl_pose is not None:
+        if self.initial_pose_flag == True and self.amcl_pose is not None:
             if self.nav_thread is None or not self.nav_thread.is_alive():
                 self.next_goal = self.discovery_mode()
                 self.get_logger().info(f"***\n NEXT GOAL: {self.next_goal} \n***")
