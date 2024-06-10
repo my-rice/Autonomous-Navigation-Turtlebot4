@@ -102,34 +102,38 @@ class Discovery(Node):
 
     
 
-
     def discovery_mode_callback(self, goal_handle):
+
         goal = goal_handle.request
         self.get_logger().info(f'Incoming request\n x: {goal.goal_pose_x} y: {goal.goal_pose_y} angle: {goal.angle} start_x: {goal.start_pose_x} start_y: {goal.start_pose_y}')
 
-        self.founded = False
-        self.signal = None
+        # self.founded = False
+        # self.signal = None
 
-        # Start the navigation in a separate thread
-        self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y))
-        self.nav_thread.start()
+        # # Start the navigation in a separate thread
+        # self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y))
+        # self.nav_thread.start()
 
-        # Wait for the navigation to complete, allowing other callbacks to be processed
-        self.nav_thread.join()  # Wait until the navigation thread completes
+        # # Wait for the navigation to complete, allowing other callbacks to be processed
+        # self.nav_thread.join()  # Wait until the navigation thread completes
 
+        self.get_logger().info("Discovery mode callback")
         result = DiscoveryAction.Result()
-
-        if(self.signal=='None'):
-            result.next_action = "None"
-        elif(self.signal is not None):
-            result.next_action = self.signal
-        else:
-            result.next_action = "Error"
-
+        self.get_logger().info("Discovery mode callback 2")
+        goal_handle.succeed()
+        self.get_logger().info("Discovery mode callback 3")
+        # if(self.signal=='None'):
+        #     result.next_action = "None"
+        # elif(self.signal is not None):
+        #     result.next_action = self.signal
+        # else:
+        #     result.next_action = "Error"
+        result.next_action = "right"
         return result
 
 
-    # Callback function for the /tests topic subscriber
+    # Call#time.sleep(4)
+        back function for the /tests topic subscriber
     def signal_callback(self, msg):
         self.get_logger().info(f'Received signal: {msg.data}')
         if msg.data == "None":

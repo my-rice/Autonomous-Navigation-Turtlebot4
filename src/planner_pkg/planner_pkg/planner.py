@@ -9,6 +9,7 @@ from discovery_interface.action import DiscoveryAction
 import yaml
 import random
 import threading
+import time
 
 from pyquaternion import Quaternion
 
@@ -47,7 +48,12 @@ class DiscoveryActionClient(Node):
         
         self.action_client.wait_for_server()
         self.get_logger().info('Action server is ready, sending goal ...')
-        self.action_client.send_goal_async(goal_msg, feedback_callback=self.feedback_callback)
+        return self.action_client.send_goal_async(goal_msg)
+
+    def get_result_callback(self, future):
+        result = future.result().result
+        self.get_logger().info('Result: {0}'.format(result.next_action))
+        return result.next_action
 
 
 class PlannerHandler(Node):
@@ -63,6 +69,8 @@ class PlannerHandler(Node):
         self.nav_thread = None
         self.navigator = TurtleBot4Navigator()
         self.initial_pose_flag = False
+
+        self.flag = True
         # Wait for Nav2
         self.navigator.waitUntilNav2Active()
 
@@ -84,7 +92,7 @@ class PlannerHandler(Node):
         #self.next_goal = self.discovery_mode() # The first thing self.run() will do is to call self.discovery_mode()
 
         # Create a timer that triggers every second
-        self.timer = self.create_timer(0.5, self.run)
+        self.timer = self.create_timer(2, self.run)
 
     def pose_callback(self, msg):
         self.amcl_pose = msg
@@ -211,14 +219,31 @@ class PlannerHandler(Node):
         
         # ****************************
         # send the goal to the discovery action server and wait for the result
-        self.discovery_action_client.send_goal(nearest_goal[0], nearest_goal[1], x, y, 0)
-        self.get_logger().info("Waiting for the result ...")
-        self.discovery_action_client.action_client.wait_for_result()
-        result = self.discovery_action_client.action_client.get_result(result)
+        goal = DiscoveryAction.Goal()
+        goal.goal_pose_x = float(nearest_goal[0])
+        goal.goal_pose_y = float(nearest_goal[1])
+        goal.start_pose_x = float(x)
+        goal.start_pose_y = float(y)
+        goal.angle = 0
+        future = self.discovery_action_client.action_client.send_goal_async(goal)
+        #future = self.discovery_action_client.send_goal(float(nearest_goal[0]), float(nearest_goal[1]), float(x), float(y), 0)
+        rclpy.spin_until_future_complete(self.discovery_action_client, future)
 
-        
-        # convert the result, which is the direction: right, left, go straight go back to a goal
-        result = "right"
+        self.get_logger().info("RESULT fra i due")
+        goal_handle = future.result()
+        get_result_future = goal_handle.get_result_async()
+        rclpy.spin_until_future_complete(self.discovery_action_client, get_result_future)
+        #time.sleep(4)
+
+        self.get_logger().info("RESULT: " + str(get_result_future.result()))
+        #self.get_logger().info("RESULT: " + str(future.result().result))
+        result = get_result_future.result().result.next_action
+
+        #rclpy.spin_until_future_complete(self.discovery_action_client, future)
+
+        #print("RESULT: ", future.result())
+        #result = future.result().next_action
+        self.get_logger().info("RESULT: " + str(result))
         next_goal = self.action_result2goal(result, (x, y, theta), nearest_goal)
 
         
@@ -242,7 +267,8 @@ class PlannerHandler(Node):
         if self.amcl_pose is None or self.initial_pose_flag == False:
             return        
 
-        if self.nav_thread is None or not self.nav_thread.is_alive():
+        if self.flag and (self.nav_thread is None or not self.nav_thread.is_alive()):
+            self.flag = False 
             # if the robot is in proximity of the goal, then we need to discover the next goal and start the navigation
             self.next_goal = self.discovery_mode()
             self.get_logger().info(f"***\n NEXT GOAL: {self.next_goal} \n***")
@@ -263,6 +289,7 @@ class PlannerHandler(Node):
                 self.get_logger().info("[DEBUG] JOINING THREAD")
                 self.nav_thread.join()
                 self.nav_thread = None
+                self.flag = True
         # if the robot is near 1 meter from the goal, then the robot has reached the goal, so we kill the thread
 
 
