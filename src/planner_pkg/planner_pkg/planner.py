@@ -4,10 +4,50 @@ from rclpy.executors import MultiThreadedExecutor
 from turtlebot4_navigation.turtlebot4_navigator import TurtleBot4Directions, TurtleBot4Navigator
 from geometry_msgs.msg import PoseWithCovarianceStamped
 
-#import DiscoveryService
+from rclpy.action import ActionClient
+from discovery_interface.action import DiscoveryAction
 import yaml
 import random
 import threading
+
+from pyquaternion import Quaternion
+
+
+# This dictionary is used to convert the angle to the signal that the robot should follow
+angles2signals = {
+    0: "right",
+    90: "up",
+    180: "left",
+    270: "down"
+}
+
+ENGAGE_DISTANCE = 3
+
+
+class GoalNotValidException(Exception):
+    """Exception raised when the goal is not valid."""
+
+    def __init__(self, message="Goal is not valid"):
+        self.message = message
+        super().__init__(self.message)
+
+class DiscoveryActionClient(Node):
+    def __init__(self):
+        super().__init__('discovery_action_client')
+        #self.action_client = ActionClient(self, DiscoveryAction, 'discovery_mode')
+
+    def send_goal(self,goal_pose_x, goal_pose_y, start_pose_x, start_pose_y, angle):
+
+        goal_msg = DiscoveryAction.Goal()
+        goal_msg.goal_pose_x = goal_pose_x
+        goal_msg.goal_pose_y = goal_pose_y
+        goal_msg.start_pose_x = start_pose_x
+        goal_msg.start_pose_y = start_pose_y
+        goal_msg.angle = angle
+        
+        self.action_client.wait_for_server()
+        self.get_logger().info('Action server is ready, sending goal ...')
+        self.action_client.send_goal_async(goal_msg, feedback_callback=self.feedback_callback)
 
 
 class PlannerHandler(Node):
@@ -16,8 +56,9 @@ class PlannerHandler(Node):
         super().__init__("Info") # Init node
         self.sub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
 
-        # Subscribe to a service
-        #self.client = self.create_client(DiscoveryService, 'discovery_mode')
+        # Create an action client for the discovery mode
+        #self.discovery_action_client = DiscoveryActionClient()
+
         self.amcl_pose = None
         self.nav_thread = None
         self.navigator = TurtleBot4Navigator()
@@ -40,13 +81,7 @@ class PlannerHandler(Node):
             self.get_logger().info("Waiting for the initial pose")
             rclpy.spin_once(self)
 
-        # while not self.cli.wait_for_service(timeout_sec=1.0):
-        #     self.get_logger().info('service not available, waiting again...')
-        # self.get_logger().info('Connected to service: discovery_mode')
-        # self.req = DiscoveryService.Request()
-        
-
-        self.next_goal = self.discovery_mode()
+        #self.next_goal = self.discovery_mode() # The first thing self.run() will do is to call self.discovery_mode()
 
         # Create a timer that triggers every second
         self.timer = self.create_timer(0.5, self.run)
@@ -62,7 +97,8 @@ class PlannerHandler(Node):
         
         self.map = dict()
 
-        # with open("config.yaml") as file: # TODO: how to read the yaml file from a ros2 node?
+        # TODO: how to read the yaml file from a ros2 node? The following code does not work
+        # with open("config.yaml") as file: 
         #     data = yaml.load(file, Loader=yaml.FullLoader)
         #     # take goals_coordinates from the yaml file and store it in variables A, B, C, D, E, F, G, H, I, J
         # goals_coordinates = data["goals_coordinates"]
@@ -77,7 +113,7 @@ class PlannerHandler(Node):
         # I = goals_coordinates["I"]
         # J = goals_coordinates["J"]
 
-
+        # TODO: For now it is hardcoded. It has be changed
         A = (57.5, -2)
         B = (56.5,-11.5)
         C = (38,-1)
@@ -88,33 +124,76 @@ class PlannerHandler(Node):
         H = (-3.5,-9.5)
         I = (-22,0.5)
         J = (-22,-8.5)
-        self.map[A] = [B, C]
-        self.map[B] = [A, D]
-        self.map[C] = [A, D, E]
-        self.map[D] = [B, C, F]
-        self.map[E] = [C, F, G]
-        self.map[F] = [D, E, H]
-        self.map[G] = [E, H, I]
-        self.map[H] = [F, G, J]
-        self.map[I] = [G, J]
-        self.map[J] = [H, I]
+        self.map[A] = [(B,"right"), (C,"down")]
+        self.map[B] = [(A,"left"), (D,"down")]
+        self.map[C] = [(A,"up"), (D,"right"), (E,"down")]
+        self.map[D] = [(B,"up"), (C,"left"), (F,"down")]
+        self.map[E] = [(C,"up"), (F,"right"), (G,"down")]
+        self.map[F] = [(D,"up"), (E,"left"), (H,"down")]
+        self.map[G] = [(E,"up"), (H,"right"), (I,"down")]
+        self.map[H] = [(F,"up"), (G,"left"), (J,"down")]
+        self.map[I] = [(G,"up"), (J,"right")]
+        self.map[J] = [(H,"up"), (I,"left")]
 
-    def send_request(self, goal_pose_x, goal_pose_y, direction):
-        self.req.goal_pose_x = goal_pose_x
-        self.req.goal_pose_y = goal_pose_y
-        self.req.angle = direction
-        self.future = self.client.call_async(self.req)
-        rclpy.spin_until_future_complete(self, self.future)
-        return self.future.result()
+    def action_result2goal(self,result, initial_pose, current_goal_pose):
+
+        # approximate the angle to the nearest 90 degrees
+        next_goal_angle = initial_pose[2]
+
+        # convert frame angle to standard frame (remove the offset)
+        next_goal_angle = next_goal_angle + 90
+
+        self.get_logger().info("The next goal angle is: " + str(next_goal_angle))
+
+        if result == "right":
+            next_goal_angle -= 90
+        elif result == "left":
+            next_goal_angle += 90
+        elif result == "goback":
+            next_goal_angle += 180
+
+        if next_goal_angle >= 360:
+            next_goal_angle -= 360
+        if next_goal_angle < 0:
+            next_goal_angle += 360
+
+        if next_goal_angle < 45 or next_goal_angle >= 315:
+            next_goal_angle = "right"
+        elif next_goal_angle < 135:
+            next_goal_angle = "up"
+        elif next_goal_angle < 225:
+            next_goal_angle = "left"
+        elif next_goal_angle < 315:
+            next_goal_angle = "down"
+        
+        
+
+        neighbors = self.map[current_goal_pose]
+        for neighbor in neighbors:
+            if neighbor[1] == next_goal_angle:
+
+                self.get_logger().info("The next goal is: " + str(neighbor[0]) + "given that the robot is in the pose: " + str(initial_pose) + " and the result is: " + result)
+                return neighbor[0]
+        
+
+        raise GoalNotValidException("The goal is not valid, the road sign is: " + result + " the robot pose is (" + str(initial_pose[0]) + ", " + str(initial_pose[1]) + ", " + str(initial_pose[2]) + ") and the goal is (" + str(current_goal_pose[0]) + ", " + str(current_goal_pose[1]) + ")"+ " the neighbors are: " + str(neighbors)+ " the next goal angle is: " + str(next_goal_angle))
+
+
+        
+
+
 
     def discovery_mode(self):
-        self.get_logger().info("Discovery mode")
+
+        self.get_logger().info("The robot is in discovery mode")
         
         # given the current pose of the robot, we need to find the nearest goal
+        
         # get the current pose of the robot
         x = self.amcl_pose.pose.pose.position.x
         y = self.amcl_pose.pose.pose.position.y
-        current_pose = (x, y)
+        theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
+
 
         # find the nearest goal
         nearest_goal = None
@@ -125,25 +204,68 @@ class PlannerHandler(Node):
                 min_distance = distance
                 nearest_goal = goal
         
-        # select a random neighbor of the nearest goal
-        neighbors = self.map[nearest_goal]
-        next_goal = neighbors[random.randint(0, len(neighbors) - 1)]
+        # # select a random neighbor of the nearest goal
+        # neighbors = self.map[nearest_goal]
+        # next_goal = neighbors[random.randint(0, len(neighbors) - 1)]
+
+        
+        # ****************************
+        # send the goal to the discovery action server and wait for the result
+        # self.discovery_action_client.send_goal(nearest_goal[0], nearest_goal[1], x, y, 0)
+        # self.get_logger().info("Waiting for the result ...")
+        # self.discovery_action_client.action_client.wait_for_result()
+        # result = self.discovery_action_client.action_client.get_result(result)
+
+        
+        # convert the result, which is the direction: right, left, go straight go back to a goal
+        result = "right"
+        next_goal = self.action_result2goal(result, (x, y, theta), nearest_goal)
+
         
         return next_goal
 
-    def start_navigation(self, x, y):
-        self.navigator.startToPose(self.navigator.getPoseStamped((x, y), TurtleBot4Directions.NORTH))
+    def start_navigation(self, x, y, angle=0):
+        self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
+
+    def get_angle(self, quaternion):
+        q = Quaternion(quaternion.w, quaternion.x, quaternion.y, quaternion.z)
+        euler = q.yaw_pitch_roll
+        yaw = euler[0]
+        # convert the yaw angle to degrees
+        theta = yaw * 180 / 3.14159265359
+        return theta
+
+
 
     def run(self):
         
-        if self.initial_pose_flag == True and self.amcl_pose is not None:
-            if self.nav_thread is None or not self.nav_thread.is_alive():
-                self.next_goal = self.discovery_mode()
-                self.get_logger().info(f"***\n NEXT GOAL: {self.next_goal} \n***")
-                x, y = map(float, self.next_goal)
-                # Start the navigation in a separate thread
-                self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y))
-                self.nav_thread.start()
+        if self.amcl_pose is None or self.initial_pose_flag == False:
+            return        
+
+        if self.nav_thread is None or not self.nav_thread.is_alive():
+            # if the robot is in proximity of the goal, then we need to discover the next goal and start the navigation
+            self.next_goal = self.discovery_mode()
+            self.get_logger().info(f"***\n NEXT GOAL: {self.next_goal} \n***")
+            x, y = map(float, self.next_goal)
+            angle = self.get_angle(self.amcl_pose.pose.pose.orientation)
+            # Start the navigation in a separate thread
+            self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y, angle))
+            self.nav_thread.start()
+        
+        self.get_logger().info(f"FUORIIII NAV THREAD: {self.nav_thread}")
+        if self.nav_thread.is_alive():
+            # if the robot is near 1 meter from the goal, then the robot has reached the goal, so we kill the thread
+            distance = (self.amcl_pose.pose.pose.position.x - self.next_goal[0]) ** 2 + (self.amcl_pose.pose.pose.position.y - self.next_goal[1]) ** 2
+            self.get_logger().info(f"Distance: {distance}")
+            if distance < ENGAGE_DISTANCE:
+                self.get_logger().info("The robot has reached the goal, killing the thread")
+                self.navigator.cancelTask()
+                self.get_logger().info("[DEBUG] JOINING THREAD")
+                self.nav_thread.join()
+                self.nav_thread = None
+        # if the robot is near 1 meter from the goal, then the robot has reached the goal, so we kill the thread
+
+
 
 
 def main(args=None):
