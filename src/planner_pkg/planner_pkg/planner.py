@@ -34,7 +34,7 @@ class GoalNotValidException(Exception):
 class DiscoveryActionClient(Node):
     def __init__(self):
         super().__init__('discovery_action_client')
-        #self.action_client = ActionClient(self, DiscoveryAction, 'discovery_mode')
+        self.action_client = ActionClient(self, DiscoveryAction, 'discovery_mode')
 
     def send_goal(self,goal_pose_x, goal_pose_y, start_pose_x, start_pose_y, angle):
 
@@ -57,7 +57,7 @@ class PlannerHandler(Node):
         self.sub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
 
         # Create an action client for the discovery mode
-        #self.discovery_action_client = DiscoveryActionClient()
+        self.discovery_action_client = DiscoveryActionClient()
 
         self.amcl_pose = None
         self.nav_thread = None
@@ -211,10 +211,10 @@ class PlannerHandler(Node):
         
         # ****************************
         # send the goal to the discovery action server and wait for the result
-        # self.discovery_action_client.send_goal(nearest_goal[0], nearest_goal[1], x, y, 0)
-        # self.get_logger().info("Waiting for the result ...")
-        # self.discovery_action_client.action_client.wait_for_result()
-        # result = self.discovery_action_client.action_client.get_result(result)
+        self.discovery_action_client.send_goal(nearest_goal[0], nearest_goal[1], x, y, 0)
+        self.get_logger().info("Waiting for the result ...")
+        self.discovery_action_client.action_client.wait_for_result()
+        result = self.discovery_action_client.action_client.get_result(result)
 
         
         # convert the result, which is the direction: right, left, go straight go back to a goal
