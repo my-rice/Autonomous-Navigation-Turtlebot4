@@ -80,7 +80,7 @@ class Image2Code(Node):
         )
         # Print the results
         #print(f"Image: {frame} -> {len(decoded_qrs)} QRs detected.")
-        if decoded_qrs == 0:
+        if len(decoded_qrs) == 0:
             out = String()
             out.data = "NOCODE"
             self.get_logger().info(out.data)
