@@ -2,7 +2,7 @@ import subprocess
 import time
 
 subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', 'colcon build;'])
-time.sleep(2)
+time.sleep(5)
 
 commands = [
     #'source install/setup.bash && ros2 launch diem_gazebo turtlebot4_ignition_no_dock.launch.py',

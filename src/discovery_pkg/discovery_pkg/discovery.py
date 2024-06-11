@@ -108,15 +108,15 @@ class Discovery(Node):
         goal = goal_handle.request
         self.get_logger().info(f'Incoming request\n x: {goal.goal_pose_x} y: {goal.goal_pose_y} angle: {goal.angle} start_x: {goal.start_pose_x} start_y: {goal.start_pose_y}')
 
-        # self.founded = False
-        # self.signal = None
+        self.founded = False
+        self.signal = None
 
-        # # Start the navigation in a separate thread
-        # self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y, self.n_points))
-        # self.nav_thread.start()
+        # Start the navigation in a separate thread
+        self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y, self.n_points))
+        self.nav_thread.start()
 
-        # # Wait for the navigation to complete, allowing other callbacks to be processed
-        # self.nav_thread.join()  # Wait until the navigation thread completes
+        # Wait for the navigation to complete, allowing other callbacks to be processed
+        self.nav_thread.join()  # Wait until the navigation thread completes
 
         self.get_logger().info("Discovery mode callback")
         result = DiscoveryAction.Result()
@@ -129,7 +129,7 @@ class Discovery(Node):
         #     result.next_action = self.signal
         # else:
         #     result.next_action = "Error"
-        result.next_action = "right"
+        result.next_action = self.signal
         return result
 
 
