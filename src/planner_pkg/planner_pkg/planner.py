@@ -14,14 +14,6 @@ import time
 from pyquaternion import Quaternion
 
 
-# This dictionary is used to convert the angle to the signal that the robot should follow
-angles2signals = {
-    0: "right",
-    90: "up",
-    180: "left",
-    270: "down"
-}
-
 ENGAGE_DISTANCE = 3
 
 
@@ -187,21 +179,15 @@ class PlannerHandler(Node):
         raise GoalNotValidException("The goal is not valid, the road sign is: " + result + " the robot pose is (" + str(initial_pose[0]) + ", " + str(initial_pose[1]) + ", " + str(initial_pose[2]) + ") and the goal is (" + str(current_goal_pose[0]) + ", " + str(current_goal_pose[1]) + ")"+ " the neighbors are: " + str(neighbors)+ " the next goal angle is: " + str(next_goal_angle))
 
 
-        
-
-
-
     def discovery_mode(self):
 
         self.get_logger().info("The robot is in discovery mode")
         
-        # given the current pose of the robot, we need to find the nearest goal
         
         # get the current pose of the robot
         x = self.amcl_pose.pose.pose.position.x
         y = self.amcl_pose.pose.pose.position.y
         theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
-
 
         # find the nearest goal
         nearest_goal = None
@@ -212,37 +198,23 @@ class PlannerHandler(Node):
                 min_distance = distance
                 nearest_goal = goal
         
-        # # select a random neighbor of the nearest goal
+        # select a random neighbor of the nearest goal
         # neighbors = self.map[nearest_goal]
         # next_goal = neighbors[random.randint(0, len(neighbors) - 1)]
 
         
         # ****************************
         # send the goal to the discovery action server and wait for the result
-        goal = DiscoveryAction.Goal()
-        goal.goal_pose_x = float(nearest_goal[0])
-        goal.goal_pose_y = float(nearest_goal[1])
-        goal.start_pose_x = float(x)
-        goal.start_pose_y = float(y)
-        goal.angle = 0
-        future = self.discovery_action_client.action_client.send_goal_async(goal)
-        #future = self.discovery_action_client.send_goal(float(nearest_goal[0]), float(nearest_goal[1]), float(x), float(y), 0)
+        
+        future = self.discovery_action_client.send_goal(float(nearest_goal[0]), float(nearest_goal[1]), float(x), float(y), 0)
         rclpy.spin_until_future_complete(self.discovery_action_client, future)
 
-        self.get_logger().info("RESULT fra i due")
         goal_handle = future.result()
         get_result_future = goal_handle.get_result_async()
         rclpy.spin_until_future_complete(self.discovery_action_client, get_result_future)
-        #time.sleep(4)
 
-        self.get_logger().info("RESULT: " + str(get_result_future.result()))
-        #self.get_logger().info("RESULT: " + str(future.result().result))
         result = get_result_future.result().result.next_action
 
-        #rclpy.spin_until_future_complete(self.discovery_action_client, future)
-
-        #print("RESULT: ", future.result())
-        #result = future.result().next_action
         self.get_logger().info("RESULT: " + str(result))
         next_goal = self.action_result2goal(result, (x, y, theta), nearest_goal)
 
@@ -278,7 +250,6 @@ class PlannerHandler(Node):
             self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y, angle))
             self.nav_thread.start()
         
-        self.get_logger().info(f"FUORIIII NAV THREAD: {self.nav_thread}")
         if self.nav_thread.is_alive():
             # if the robot is near 1 meter from the goal, then the robot has reached the goal, so we kill the thread
             distance = (self.amcl_pose.pose.pose.position.x - self.next_goal[0]) ** 2 + (self.amcl_pose.pose.pose.position.y - self.next_goal[1]) ** 2
@@ -286,7 +257,6 @@ class PlannerHandler(Node):
             if distance < ENGAGE_DISTANCE:
                 self.get_logger().info("The robot has reached the goal, killing the thread")
                 self.navigator.cancelTask()
-                self.get_logger().info("[DEBUG] JOINING THREAD")
                 self.nav_thread.join()
                 self.nav_thread = None
                 self.flag = True
