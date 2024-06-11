@@ -61,13 +61,13 @@ class PlannerHandler(Node):
         self.nav_thread = None
         self.navigator = TurtleBot4Navigator()
         self.initial_pose_flag = False
-        self.first_discovery = False
+        self.first_discovery = True
         self.flag = True
         # Wait for Nav2
         # self.navigator.waitUntilNav2Active()
 
 
-        self.build_p_map('/home/giovanni/Desktop/Mobile_Robots-1/src/planner_pkg/config.yaml')
+        self.build_p_map('/home/davide/turtlebot4/Mobile_Robots/src/planner_pkg/config.yaml')
         # Wait for the initial pose
 
         while self.initial_pose_flag == False:
@@ -172,6 +172,7 @@ class PlannerHandler(Node):
 
         # approximate the angle to the nearest 90 degrees
         next_goal_angle = initial_pose[2]
+        self.get_logger().info("The initial pose is: " + str(initial_pose))
         self.get_logger().info("THe result is: " + result)
         # convert frame angle to standard frame (remove the offset)
         next_goal_angle = next_goal_angle + 90
@@ -222,14 +223,15 @@ class PlannerHandler(Node):
         y = self.amcl_pose.pose.pose.position.y
         theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
 
-        # find the nearest goal
-        nearest_goal = None
-        min_distance = float("inf")
-        for goal in self.map:
-            distance = (goal[0] - x) ** 2 + (goal[1] - y) ** 2
-            if distance < min_distance:
-                min_distance = distance
-                nearest_goal = goal
+        # find the nearest goal if it is the first discovery
+        if self.first_discovery == True:
+            
+            min_distance = float("inf")
+            for goal in self.map:
+                distance = (goal[0] - x) ** 2 + (goal[1] - y) ** 2
+                if distance < min_distance:
+                    min_distance = distance
+                    self.next_goal = goal
         
         # select a random neighbor of the nearest goal
         # neighbors = self.map[nearest_goal]
@@ -240,12 +242,13 @@ class PlannerHandler(Node):
         # send the goal to the discovery action server and wait for the result
 
         # next_goal_discovery = self.blabla(next_goal,nearest_goal) # DARE QUELLO DOPO
-        if(self.first_discovery == False):
-            discovery_goal_intersects, angle = self.get_intersection_points(nearest_goal, theta, "straighton")
+        if(self.first_discovery == True):
+            self.get_logger().info("The first discovery")
+            discovery_goal_intersects, angle = self.get_intersection_points(self.next_goal, theta, "straighton")
             points = self.order_by_distance(discovery_goal_intersects, x, y)
             self.action_payload = (points[1][0],points[1][1],angle)
-            self.first_discovery = True
-            self.get_logger().info("THe action payload is: " + str(self.action_payload )+ "and the nearest goal is: " + str(nearest_goal))
+            self.first_discovery = False
+            self.get_logger().info("THe action payload is: " + str(self.action_payload )+ "and the nearest goal is: " + str(self.next_goal))
 
 
         future = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]))
@@ -258,11 +261,13 @@ class PlannerHandler(Node):
         result = get_result_future.result().result.next_action
 
         self.get_logger().info("RESULT: " + str(result))
-        self.next_goal = self.action_result2goal(result, (x, y, theta), nearest_goal)
-        self.last_goal = nearest_goal
-
+        self.last_goal = self.next_goal
+        self.next_goal = self.action_result2goal(result, (x, y, theta), self.next_goal)
+        
 
         intersection_points, angle = self.get_intersection_points(self.next_goal, theta, result)
+        
+
         points = self.order_by_distance(intersection_points, x, y)
         self.nav_goal = (points[0][0], points[0][1], angle)
         self.action_payload = (points[1][0],points[1][1],angle)
@@ -274,15 +279,15 @@ class PlannerHandler(Node):
         x1,y1 = next_goal
 
         # Parametri del cerchio
-        rho = 4
+        rho = 1
         xc, yc = next_goal
 
         # Convert frame angle to standard frame (remove the offset)
-        standard_angle = theta + 90
+        standard_angle = theta #+ 90
         standard_angle = self.compute_next_angle(standard_angle, result)
 
         # Portiamo l'angolo tra 0 e 360 gradi
-        angle = standard_angle - 90
+        angle = standard_angle #- 90
         if angle < 0:
             angle += 360
         if angle >= 360:
@@ -296,8 +301,10 @@ class PlannerHandler(Node):
             intersection_points = [(x_intersect1, y_intersect1), (x_intersect2, y_intersect2)]
             return intersection_points, angle
 
+        self.get_logger().info(f"Standard angle: {standard_angle}")
         m = math.tan(math.radians(standard_angle))
         q = y1 - m * x1
+        self.get_logger().info(f"m: {m}, q: {q}")
 
         # Coefficienti dell'equazione quadratica
         A = 1 + m**2
@@ -318,8 +325,8 @@ class PlannerHandler(Node):
         y_intersect2 = m * x_intersect2 + q
 
         # Riportare i punti nel sistema originale (x verso l'alto, y verso sinistra)
-        intersection_points = [(x_intersect1,-y_intersect1), (x_intersect2, -y_intersect2)]
-
+        intersection_points = [(x_intersect1,y_intersect1), (x_intersect2, y_intersect2)]
+        self.get_logger().info(f"Intersection points: {intersection_points} and angle: {angle}")
         return intersection_points, angle
 
     def start_navigation(self, x, y, angle=0):
@@ -350,10 +357,13 @@ class PlannerHandler(Node):
             # Start the navigation in a separate thread
             self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y, angle))
             self.nav_thread.start()
+            #
+        
+        if not self.nav_thread.is_alive():
+            self.flag = True
             self.nav_thread.join()
             self.nav_thread = None
-            self.flag = True
-        
+
         # if self.nav_thread.is_alive():
             # if the robot is near 1 meter from the goal, then the robot has reached the goal, so we kill the thread
             # distance = (self.amcl_pose.pose.pose.position.x - self.next_goal[0]) ** 2 + (self.amcl_pose.pose.pose.position.y - self.next_goal[1]) ** 2
