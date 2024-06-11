@@ -1,12 +1,100 @@
-goals_coordinates:
-  A: [57.5, -2]
-  B: [56.5, -11.5]
-  C: [38, -1]
-  D: [38, -10]
-  E: [17.5, -0.5]
-  F: [17.2, -10]
-  G: [-2.5, 0]
-  H: [-3.5, -9.5]
-  I: [-22, 0.5]
-  J: [-22, -8.5]
+# goals_coordinates:
+#   A: [57.5, -2]
+#   B: [56.5, -11.5]
+#   C: [38, -1]
+#   D: [38, -10]
+#   E: [17.5, -0.5]
+#   F: [17.2, -10]
+#   G: [-2.5, 0]
+#   H: [-3.5, -9.5]
+#   I: [-22, 0.5]
+#   J: [-22, -8.5]
+# timer: 0.1
+map:
+  nodes:
+    A:
+      coordinates: [57.5, -2]
+    B:
+      coordinates: [56.5, -11.5]
+    C:
+      coordinates: [38, -1]
+    D:
+      coordinates: [38, -10]
+    E:
+      coordinates: [17.5, -0.5]
+    F:
+      coordinates: [17.2, -10]
+    G:
+      coordinates: [-2.5, 0]
+    H:
+      coordinates: [-3.5, -9.5]
+    I:
+      coordinates: [-22, 0.5]
+    J:
+      coordinates: [-22, -8.5]
+
+  connections:
+    A:
+      - point: B
+        direction: right
+      - point: C
+        direction: down
+    B:
+      - point: A
+        direction: left
+      - point: D
+        direction: down
+    C:
+      - point: A
+        direction: up
+      - point: D
+        direction: right
+      - point: E
+        direction: down
+    D:
+      - point: B
+        direction: up
+      - point: C
+        direction: left
+      - point: F
+        direction: down
+    E:
+      - point: C
+        direction: up
+      - point: F
+        direction: right
+      - point: G
+        direction: down
+    F:
+      - point: D
+        direction: up
+      - point: E
+        direction: left
+      - point: H
+        direction: down
+    G:
+      - point: E
+        direction: up
+      - point: H
+        direction: right
+      - point: I
+        direction: down
+    H:
+      - point: F
+        direction: up
+      - point: G
+        direction: left
+      - point: J
+        direction: down
+    I:
+      - point: G
+        direction: up
+      - point: J
+        direction: right
+    J:
+      - point: H
+        direction: up
+      - point: I
+        direction: left
+
 timer: 0.1
