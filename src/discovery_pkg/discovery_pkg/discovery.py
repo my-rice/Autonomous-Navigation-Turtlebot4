@@ -42,6 +42,7 @@ class Discovery(Node):
             config = yaml.safe_load(file)
 
         self.policy = config['policy']['array_based']
+        self.n_points = config['policy']['n_points']
 
     # def policy_arc(self, goal_x, goal_y, angle, start_x, start_y): # TODO : Aggiungere dove spostarsi prima in base all'incrocio
     #     r = math.sqrt((goal_x - start_x)**2 + (goal_y - start_y)**2)
@@ -80,14 +81,14 @@ class Discovery(Node):
     def approach(self):
         raise NotImplementedError
 
-    def start_navigation(self, goal_x, goal_y, angle, start_x, start_y):
+    def start_navigation(self, goal_x, goal_y, angle, start_x, start_y, n_points):
         # points = self.policy_arc(goal_x, goal_y, angle, start_x, start_y)
-        points = self.policy_straight(goal_x, goal_y, angle, start_x, start_y)
+        points = self.policy_straight(goal_x, goal_y, angle, start_x, start_y, n_points)
         for point in points:
             self.get_logger().info(f"Point: {point}")
             for i in range(-1,2):
                 try:
-                    self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]+i*90))
+                    self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]+i*45))
                     if self.founded == True:
                         self.get_logger().info(f"Founded signal: {self.signal}")
                         break
@@ -111,7 +112,7 @@ class Discovery(Node):
         # self.signal = None
 
         # # Start the navigation in a separate thread
-        # self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y))
+        # self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y, self.n_points))
         # self.nav_thread.start()
 
         # # Wait for the navigation to complete, allowing other callbacks to be processed
@@ -132,14 +133,14 @@ class Discovery(Node):
         return result
 
 
-    # Call#time.sleep(4)
-        back function for the /tests topic subscriber
+
     def signal_callback(self, msg):
         self.get_logger().info(f'Received signal: {msg.data}')
         if msg.data == "None":
-            self.founded = True
-            self.navigator.cancelTask()
-        elif msg.data != "No code":
+            # self.founded = True
+            # self.navigator.cancelTask()
+            pass
+        elif msg.data != "NOCODE":
             self.signal = msg.data  
             self.founded = True
             self.navigator.cancelTask()
