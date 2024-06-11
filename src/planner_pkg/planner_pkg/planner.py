@@ -56,6 +56,8 @@ class PlannerHandler(Node):
 
         # Create an action client for the discovery mode
         self.discovery_action_client = DiscoveryActionClient()
+        self.declare_parameter('config_file', '')
+        self.config_path = self.get_parameter('config_file').get_parameter_value().string_value
 
         self.amcl_pose = None
         self.nav_thread = None
@@ -67,7 +69,8 @@ class PlannerHandler(Node):
         # self.navigator.waitUntilNav2Active()
 
 
-        self.build_p_map('/home/davide/turtlebot4/Mobile_Robots/src/planner_pkg/config.yaml')
+
+        self.build_p_map()
         # Wait for the initial pose
 
         while self.initial_pose_flag == False:
@@ -92,7 +95,7 @@ class PlannerHandler(Node):
         
 
 
-    def build_p_map(self, config_path):
+    def build_p_map(self):
         self.get_logger().info("Building the map")
         
         self.map = dict()
@@ -113,7 +116,7 @@ class PlannerHandler(Node):
         # I = goals_coordinates["I"]
         # J = goals_coordinates["J"]
 
-        with open(config_path, 'r') as file:
+        with open(self.config_path, 'r') as file:
             data = yaml.safe_load(file)['map']
             nodes = data['nodes']
             connections = data['connections']
