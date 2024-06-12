@@ -16,7 +16,7 @@ sudo_prompt = proc.communicate(password.encode())[1]
 command = 'cd ./../scripts; ./configure_discovery.sh'
 
 # Define the inputs
-inputs = '192.168.111.111\n\n\n'
+inputs = '192.168.118.193\n\n\n'
 
 # Run the command
 proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)

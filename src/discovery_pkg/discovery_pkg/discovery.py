@@ -11,6 +11,7 @@ from std_msgs.msg import String
 import math
 from geometry_msgs.msg import PoseWithCovarianceStamped
 import time
+from lifecycle_msgs.srv import ChangeState
 
 class Discovery(Node):
     def __init__(self, node_name, config_path=None, **kwargs):
@@ -29,6 +30,13 @@ class Discovery(Node):
         # Create a subscription for the /tests topic
         self.sub = self.create_subscription(String, '/output_command', self.signal_callback, 10)
         self.doublesub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
+        self.client = self.create_client(ChangeState, 'lifecycle_perception/change_state')
+        self.wait_for_service()
+        self.req = ChangeState.Request()
+        self.req.transition.id = 1 
+        future = self.client.call_async(self.req)
+        rclpy.spin_until_future_complete(self, future)
+        
         self.in_discovery = False
         self.get_logger().info("Subscribed to /output_command topic")
 
@@ -65,7 +73,13 @@ class Discovery(Node):
     #         points.append((x, y, angle + angle_offset))
     #     self.get_logger().info(f"Points: {points}")
     #     return points
-    
+    def wait_for_service(self):
+        if (not self.client.wait_for_service(timeout_sec=1.0)):
+            self.get_logger().info("Service is not ready, shutting down...")
+            rclpy.shutdown()
+            exit()
+            
+
     def policy_straight(self, goal_x, goal_y, angle, start_x, start_y, n_points=4):
         r = math.sqrt((goal_x - start_x)**2 + (goal_y - start_y)**2)
         increment_x = (goal_x - start_x) / n_points
@@ -109,6 +123,11 @@ class Discovery(Node):
     
 
     def discovery_mode_callback(self, goal_handle):
+        self.wait_for_service()
+        self.req.transition.id = 3
+        future = self.client.call_async(self.req)
+        rclpy.spin_until_future_complete(self, future)
+
         self.in_discovery = True
         goal = goal_handle.request
         # self.get_logger().info(f'Incoming request\n x: {goal.goal_pose_x} y: {goal.goal_pose_y} angle: {goal.angle} start_x: {goal.start_pose_x} start_y: {goal.start_pose_y}')
@@ -138,6 +157,11 @@ class Discovery(Node):
         if(self.signal is None):
             result.next_action = "straighton"
         self.in_discovery = False
+
+        self.wait_for_service()
+        self.req.transition.id = 4
+        future = self.client.call_async(self.req)
+        rclpy.spin_until_future_complete(self, future)
         return result
 
 
