@@ -83,21 +83,24 @@ class Discovery(Node):
 
     def start_navigation(self, goal_x, goal_y, angle, start_x, start_y, n_points):
         # points = self.policy_arc(goal_x, goal_y, angle, start_x, start_y)
-        # points = self.policy_straight(goal_x, goal_y, angle, start_x, start_y, n_points)
-        # for point in points:
-        #     self.get_logger().info(f"Point: {point}")
-        #     for i in range(-1,2):
-        #         try:
-        #             self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]+i*45))
-        #             if self.founded == True:
-        #                 self.get_logger().info(f"Founded signal: {self.signal}")
-        #                 break
-        #         except Exception as e:
-        #             self.get_logger().info(f"Error: {e}")
-        #             self.signal = "Error"
-        #             break
+        points = self.policy_straight(goal_x, goal_y, angle, start_x, start_y, n_points)
+        for point in points:
+            self.get_logger().info(f"Point: {point}")
+            for i in [0,-1,1]:
+                try:
+                    self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]+i*65))
+                    time.sleep(0.5)
+                    if self.founded == True:
+                        self.get_logger().info(f"Founded signal: {self.signal}")
+                        break
+                except Exception as e:
+                    self.get_logger().info(f"Error: {e}")
+                    self.signal = "Error"
+                    break
+            time.sleep(0.5)
 
-        self.navigator.startToPose(self.navigator.getPoseStamped((goal_x, goal_y), angle))
+
+        #self.navigator.startToPose(self.navigator.getPoseStamped((goal_x, goal_y), angle))
         # if(self.signal is None):
         #     #approach
         #     approach = self.approach()
@@ -130,10 +133,10 @@ class Discovery(Node):
         #     result.next_action = self.signal
         # else:
         #     result.next_action = "Error"
-        result.next_action = "right"
-        # result.next_action = (str(self.signal)).lower()
-        # if(self.signal is None):
-        #     result.next_action = "straighton"
+        # result.next_action = "right"
+        result.next_action = (str(self.signal)).lower()
+        if(self.signal is None):
+            result.next_action = "straighton"
         self.in_discovery = False
         return result
 
@@ -141,19 +144,20 @@ class Discovery(Node):
 
     def signal_callback(self, msg):
         if(self.in_discovery == True):
-            self.get_logger().info(f'Received signal: {msg.data}')
+            #self.get_logger().info(f'Received signal: {msg.data}')
 
             if msg.data == "None":
                 # self.founded = True
                 # self.navigator.cancelTask()
                 pass
             elif msg.data != "NOCODE":
+                self.get_logger().info(f'Received signal: {msg.data}')
                 self.signal = msg.data  
                 self.founded = True
                 self.navigator.cancelTask()
             else:
 
-                self.get_logger().info("No code")
+                pass
 
     def pose_callback(self, msg):
         self.amcl_pose = msg
