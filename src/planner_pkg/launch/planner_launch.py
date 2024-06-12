@@ -11,13 +11,13 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'config_file',
-            default_value='/home/giovanni/Desktop/Mobile_Robots-1/src/planner_pkg/config.yaml',
+            default_value='/home/davide/turtlebot4/Mobile_Robots/src/planner_pkg/config.yaml',
             description='Path to the config file'
         ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(["/opt/ros/humble/share/turtlebot4_navigation/launch/localization.launch.py"]),
-            launch_arguments={'map': 'src/map/diem_map.yaml'}.items()  # Passaggio del parametro "map" al file di lancio localization.launch.py
-        ),
+        # IncludeLaunchDescription(
+        #     PythonLaunchDescriptionSource(["/opt/ros/humble/share/turtlebot4_navigation/launch/localization.launch.py"]),
+        #     launch_arguments={'map': 'src/map/diem_map.yaml'}.items()  # Passaggio del parametro "map" al file di lancio localization.launch.py
+        # ),
         Node(
             package='planner_pkg',
             executable='planner',

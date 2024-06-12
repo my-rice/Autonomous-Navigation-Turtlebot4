@@ -3,6 +3,9 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor 
 from turtlebot4_navigation.turtlebot4_navigator import TurtleBot4Directions, TurtleBot4Navigator
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from irobot_create_msgs.msg import KidnapStatus
+
+
 
 from rclpy.action import ActionClient
 from discovery_interface.action import DiscoveryAction
@@ -12,6 +15,7 @@ import threading
 import time
 import math
 from pyquaternion import Quaternion
+
 
 
 ENGAGE_DISTANCE = 3
@@ -40,7 +44,13 @@ class DiscoveryActionClient(Node):
         
         self.action_client.wait_for_server()
         self.get_logger().info('Action server is ready, sending goal ...')
-        return self.action_client.send_goal_async(goal_msg)
+        self.current_goal_handle = self.action_client.send_goal_async(goal_msg)  
+        return self.current_goal_handle
+
+    def cancel_goal(self):
+        if self.current_goal_handle is not None:
+            self.action_client.cancel_goal_async(self.current_goal_handle)
+            self.get_logger().info('Goal cancelled.')
 
     def get_result_callback(self, future):
         result = future.result().result
@@ -53,11 +63,12 @@ class PlannerHandler(Node):
     def __init__(self):
         super().__init__("Info") # Init node
         self.sub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
-
+        self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, 10)
         # Create an action client for the discovery mode
         self.discovery_action_client = DiscoveryActionClient()
-        self.declare_parameter('config_file', '')
-        self.config_path = self.get_parameter('config_file').get_parameter_value().string_value
+        #self.declare_parameter('config_file', '')
+        #self.config_path = self.get_parameter('config_file').get_parameter_value().string_value
+        self.config_path = "/home/davide/turtlebot4/Mobile_Robots/src/planner_pkg/config.yaml"
 
         self.amcl_pose = None
         self.nav_thread = None
@@ -94,6 +105,10 @@ class PlannerHandler(Node):
         self.get_logger().info(f"Pose callback: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
         
 
+    def kidnapped_callback(self, msg):
+        self.is_kidnapped = msg.is_kidnapped
+        self.get_logger().info(str(self.is_kidnapped))
+        
 
     def build_p_map(self):
         self.get_logger().info("Building the map")
@@ -344,6 +359,11 @@ class PlannerHandler(Node):
         return theta
 
 
+    def kidnapped_mode(self):
+        self.abort()
+
+    def abort(self):
+        pass
 
     def run(self):
         
@@ -366,6 +386,9 @@ class PlannerHandler(Node):
             self.flag = True
             self.nav_thread.join()
             self.nav_thread = None
+
+        if self.is_kidnapped:
+            self.kidnapped_mode()
 
         # if self.nav_thread.is_alive():
             # if the robot is near 1 meter from the goal, then the robot has reached the goal, so we kill the thread

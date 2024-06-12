@@ -11,6 +11,7 @@ from std_msgs.msg import String
 import math
 from geometry_msgs.msg import PoseWithCovarianceStamped
 import time
+from rclpy.action import CancelResponse, GoalResponse
 
 class Discovery(Node):
     def __init__(self, node_name, config_path=None, **kwargs):
@@ -19,13 +20,18 @@ class Discovery(Node):
                     self,
                     DiscoveryAction,
                     'discovery_mode',    
-                    self.discovery_mode_callback)
+                    self.discovery_mode_callback,
+                    self.execute_callback,
+                    goal_callback=self.goal_callback,
+                    cancel_callback=self.cancel_callback
+                )
         self.get_logger().info("Action Server 'discovery_mode' is ready")
         self.navigator = TurtleBot4Navigator()
         self.read_parameters(config_path)
         self.founded = False
         self.signal = None
         self.amcl_pose = None
+        self.mutex = threading.Lock()
         # Create a subscription for the /tests topic
         self.sub = self.create_subscription(String, '/output_command', self.signal_callback, 10)
         self.doublesub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
@@ -33,6 +39,24 @@ class Discovery(Node):
         self.get_logger().info("Subscribed to /output_command topic")
 
         self.nav_thread = None
+        self.cancel_requested = False
+
+    def goal_callback(self, goal_request):
+        self.get_logger().info('Received goal request')
+        return GoalResponse.ACCEPT
+
+    def cancel_callback(self, goal_handle):
+        self.get_logger().info('Received cancel request')
+
+        with self.mutex:
+            if self.nav_thread is not None and self.nav_thread.is_alive():
+                self.get_logger().info('Cancelling navigation thread')
+                self.navigator.cancelTask()
+                #self.nav_thread.join()
+                self.get_logger().info('Navigation thread cancelled')
+                self.cancel_requested = True
+
+        return CancelResponse.ACCEPT
 
     def read_parameters(self, config_path):
         if config_path is None:
@@ -114,27 +138,35 @@ class Discovery(Node):
         self.signal = None
 
         # # Start the navigation in a separate thread
-        self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y, self.n_points))
-        self.nav_thread.start()
+        with self.mutex:
+            self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y, self.n_points))
+            self.nav_thread.start()
 
-        # Wait for the navigation to complete, allowing other callbacks to be processed
-        self.nav_thread.join()  # Wait until the navigation thread completes
-        self.get_logger().info("Discovery mode callback")
-        result = DiscoveryAction.Result()
-        self.get_logger().info("Discovery mode callback 2")
-        goal_handle.succeed()
-        self.get_logger().info("Discovery mode callback 3")
-        # if(self.signal=='None'):
-        #     result.next_action = "None"
-        # elif(self.signal is not None):
-        #     result.next_action = self.signal
-        # else:
-        #     result.next_action = "Error"
-        result.next_action = "right"
-        # result.next_action = (str(self.signal)).lower()
-        # if(self.signal is None):
-        #     result.next_action = "straighton"
-        self.in_discovery = False
+            # Wait for the navigation to complete, allowing other callbacks to be processed
+            self.nav_thread.join()  # Wait until the navigation thread completes
+            self.nav_thread = None
+        if self.cancel_requested:
+            goal_handle.abort()
+            self.cancel_requested = False
+            return DiscoveryAction.Result()
+        else:
+            self.get_logger().info("Discovery mode callback")
+            result = DiscoveryAction.Result()
+            self.get_logger().info("Discovery mode callback 2")
+            goal_handle.succeed()
+            self.get_logger().info("Discovery mode callback 3")
+
+            # if(self.signal=='None'):
+            #     result.next_action = "None"
+            # elif(self.signal is not None):
+            #     result.next_action = self.signal
+            # else:
+            #     result.next_action = "Error"
+            result.next_action = "right"
+            # result.next_action = (str(self.signal)).lower()
+            # if(self.signal is None):
+            #     result.next_action = "straighton"
+            self.in_discovery = False
         return result
 
 
