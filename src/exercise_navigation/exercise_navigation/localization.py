@@ -31,7 +31,7 @@ def main():
     goal_poses.append(navigator.getPoseStamped([3.0, -1.0], TurtleBot4Directions.WEST))
     goal_poses.append(navigator.getPoseStamped([3.0, 0.0], TurtleBot4Directions.WEST))
     goal_poses.append(navigator.getPoseStamped([3.0, 1.0], TurtleBot4Directions.WEST))
-
+    
     # Undock
     #navigator.undock()
 

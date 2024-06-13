@@ -21,7 +21,6 @@ class Discovery(Node):
                     DiscoveryAction,
                     'discovery_mode',    
                     self.discovery_mode_callback,
-                    self.execute_callback,
                     goal_callback=self.goal_callback,
                     cancel_callback=self.cancel_callback
                 )
@@ -40,6 +39,8 @@ class Discovery(Node):
 
         self.nav_thread = None
         self.cancel_requested = False
+
+        self.i = 0 # TODO : Da rimuovere
 
     def goal_callback(self, goal_request):
         self.get_logger().info('Received goal request')
@@ -165,7 +166,10 @@ class Discovery(Node):
             #     result.next_action = self.signal
             # else:
             #     result.next_action = "Error"
-            result.next_action = "right"
+
+            signs =  ["right", "right", "stop"]
+            result.next_action = signs[self.i]
+            self.i += 1
             # result.next_action = (str(self.signal)).lower()
             # if(self.signal is None):
             #     result.next_action = "straighton"
