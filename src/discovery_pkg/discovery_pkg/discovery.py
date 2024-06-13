@@ -99,7 +99,7 @@ class Discovery(Node):
     #     self.get_logger().info(f"Points: {points}")
     #     return points
     def wait_for_service(self):
-        if (not self.client.wait_for_service(timeout_sec=1.0)):
+        if (not self.client.wait_for_service(timeout_sec=10.0)):
             self.get_logger().info("Service is not ready, shutting down...")
             rclpy.shutdown()
             exit()
@@ -125,9 +125,9 @@ class Discovery(Node):
         points = self.policy_straight(goal_x, goal_y, angle, start_x, start_y, n_points)
         for num_points,point in enumerate(points):
             self.get_logger().info(f"Point: {point}")
-            for i in [-1,1]:
+            for i in [-1,2]:
                 try:
-                    self.navigator.spin(i*45)
+                    self.navigator.spin(math.radians(i*45))
                     if self.founded == True:
                         self.get_logger().info(f"Founded signal: {self.signal}")
                         break
@@ -178,6 +178,10 @@ class Discovery(Node):
             # Wait for the navigation to complete, allowing other callbacks to be processed
         self.nav_thread.join()  # Wait until the navigation thread completes
         self.nav_thread = None
+        self.wait_for_service()
+        self.req.transition.id = 4
+        future = self.client.call_async(self.req)
+        rclpy.spin_until_future_complete(self, future)
         if self.cancel_requested:
             goal_handle.abort()
             self.cancel_requested = False
@@ -196,13 +200,15 @@ class Discovery(Node):
             # else:
             #     result.next_action = "Error"
 
-            signs =  ["right", "right", "stop"]
-            result.next_action = signs[self.i]
-            self.i += 1
+            result.next_action = (str(self.signal)).lower()
+            if(self.signal is None):
+                result.next_action = "right" # TODO Da fare random
+            self.in_discovery = False
             # result.next_action = (str(self.signal)).lower()
             # if(self.signal is None):
             #     result.next_action = "straighton"
             self.in_discovery = False
+
         return result
 
 

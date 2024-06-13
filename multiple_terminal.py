@@ -9,9 +9,9 @@ commands = [
     'source install/setup.bash && ros2 launch turtlebot4_navigation localization.launch.py map:=src/map/diem_map.yaml',
     'source install/setup.bash && ros2 launch turtlebot4_navigation nav2.launch.py',
     'source install/setup.bash && ros2 launch turtlebot4_viz view_robot.launch.py',
-    #'source install/setup.bash && ros2 run planner_pkg planner',
-    #'source install/setup.bash && ros2 run discovery_pkg discovery',
-    #'source install/setup.bash && ros2 run sig_rec decode_mod'
+    'source install/setup.bash && ros2 run sig_rec decode_mod',
+    'source install/setup.bash && ros2 run discovery_pkg discovery',
+    'source install/setup.bash && ros2 launch planner_pkg planner_launch.py'
 ]
 
 for cmd in commands:
