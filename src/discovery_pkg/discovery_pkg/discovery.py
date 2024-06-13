@@ -12,6 +12,7 @@ import math
 from geometry_msgs.msg import PoseWithCovarianceStamped
 import time
 from rclpy.action import CancelResponse, GoalResponse
+from lifecycle_msgs.srv import ChangeState
 
 class Discovery(Node):
     def __init__(self, node_name, config_path=None, **kwargs):
@@ -34,6 +35,12 @@ class Discovery(Node):
         # Create a subscription for the /tests topic
         self.sub = self.create_subscription(String, '/output_command', self.signal_callback, 10)
         self.doublesub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
+        self.client = self.create_client(ChangeState, 'lifecycle_perception/change_state')
+        self.wait_for_service()
+        self.req = ChangeState.Request()
+        self.req.transition.id = 1 
+        future = self.client.call_async(self.req)
+        rclpy.spin_until_future_complete(self, future)
         self.in_discovery = False
         self.get_logger().info("Subscribed to /output_command topic")
 
@@ -91,6 +98,12 @@ class Discovery(Node):
     #     self.get_logger().info(f"Points: {points}")
     #     return points
     
+    def wait_for_service(self):
+        if (not self.client.wait_for_service(timeout_sec=10.0)):
+            self.get_logger().info("Service is not ready, shutting down...")
+            rclpy.shutdown()
+            exit()
+
     def policy_straight(self, goal_x, goal_y, angle, start_x, start_y, n_points=4):
         r = math.sqrt((goal_x - start_x)**2 + (goal_y - start_y)**2)
         increment_x = (goal_x - start_x) / n_points
@@ -109,9 +122,9 @@ class Discovery(Node):
     def start_navigation(self, goal_x, goal_y, angle, start_x, start_y, n_points):
         # points = self.policy_arc(goal_x, goal_y, angle, start_x, start_y)
         points = self.policy_straight(goal_x, goal_y, angle, start_x, start_y, n_points)
-        for point in points:
+        for num_points,point in enumerate(points):
             self.get_logger().info(f"Point: {point}")
-            for i in [0,-1,1]:
+            for i in [0]:
                 try:
                     self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]+i*65))
                     time.sleep(0.5)
@@ -134,6 +147,11 @@ class Discovery(Node):
     
 
     def discovery_mode_callback(self, goal_handle):
+        self.wait_for_service()
+        self.req = ChangeState.Request()
+        self.req.transition.id = 3
+        future_start = self.client.call_async(self.req)
+        rclpy.spin_until_future_complete(self, future_start)
         self.in_discovery = True
         goal = goal_handle.request
         # self.get_logger().info(f'Incoming request\n x: {goal.goal_pose_x} y: {goal.goal_pose_y} angle: {goal.angle} start_x: {goal.start_pose_x} start_y: {goal.start_pose_y}')
@@ -149,10 +167,15 @@ class Discovery(Node):
             # Wait for the navigation to complete, allowing other callbacks to be processed
         self.nav_thread.join()  # Wait until the navigation thread completes
         self.nav_thread = None
+        self.wait_for_service()
+        self.req = ChangeState.Request()
+        self.req.transition.id = 4
+        future_end = self.client.call_async(self.req)
+        rclpy.spin_until_future_complete(self, future_end)
         if self.cancel_requested:
             goal_handle.abort()
             self.cancel_requested = False
-            return DiscoveryAction.Result()
+            return DiscoveryAction.Result() # TODO spostare sopra
         else:
             self.get_logger().info("Discovery mode callback")
             result = DiscoveryAction.Result()
@@ -166,13 +189,11 @@ class Discovery(Node):
             #     result.next_action = self.signal
             # else:
             #     result.next_action = "Error"
+            if(self.signal is None):
+                    result.next_action = "right" 
+            else:
+                result.next_action = (str(self.signal)).lower()
 
-            signs =  ["right", "right", "stop"]
-            result.next_action = signs[self.i]
-            self.i += 1
-            # result.next_action = (str(self.signal)).lower()
-            # if(self.signal is None):
-            #     result.next_action = "straighton"
             self.in_discovery = False
         return result
 
