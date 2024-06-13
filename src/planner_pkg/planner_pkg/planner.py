@@ -29,6 +29,14 @@ class GoalNotValidException(Exception):
         self.message = message
         super().__init__(self.message)
 
+class ExitException(Exception):
+    """Exception raised when the robot has reached the final goal."""
+
+    def __init__(self, message="The robot has reached the final goal"):
+        self.message = message
+        super().__init__(self.message)
+
+
 class DiscoveryActionClient(Node):
     def __init__(self):
         super().__init__('discovery_action_client')
@@ -100,37 +108,24 @@ class PlannerHandler(Node):
             self.get_logger().info("Action server is ready")
         else:
             self.get_logger().info("Action server is not ready, shutting down...")
-            rclpy.shutdown()
+            rclpy.shutdown() #TODO: raise exception and exit
             exit()
        
-        #self.next_goal = self.discovery_mode() # The first thing self.run() will do is to call self.discovery_mode()
+        self.timer = self.create_timer(self.timer, self.run)
 
-        # Create a timer that triggers every second
-        while self.initial_pose_flag == False:
-            # get the confirmation that the initial pose has been set by the user in rviz
-            self.get_logger().info("Waiting for the initial pose")
-            input("Press Enter to confirm the initial pose")
-            self.initial_pose_flag = True
-            self.get_logger().info("Initial pose set")
-
-        while self.amcl_pose is None:
-            self.get_logger().info("Waiting for the initial pose")
-            rclpy.spin_once(self)
-
-
-        self.timer = self.create_timer(self.timer_period, self.run)
-
-    def read_parameters(self, config_path):
-        if config_path is None:
-            config_path = 'src/planner_pkg/config.yaml'
-
-        with open(config_path, 'r') as file:
+    def read_parameters(self):
+        self.get_logger().info("Reading parameters from the config file: " + self.config_path)
+        with open(self.config_path, 'r') as file:
             config = yaml.safe_load(file)
 
         self.timer = config['planner_parameters']['timer_period']
         self.timeout = config['planner_parameters']['timeout']
+        self.nodes = config['map']['nodes']
+        self.connections = config['map']['connections']
 
     def pose_callback(self, msg):
+        if(not self.initial_pose_flag):
+            self.initial_pose_flag = True
         self.amcl_pose = msg
         self.get_logger().info(f"Pose callback: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
         
@@ -161,37 +156,17 @@ class PlannerHandler(Node):
         
         self.map = dict()
 
-        # TODO: how to read the yaml file from a ros2 node? The following code does not work
-        # with open("config.yaml") as file: 
-        #     data = yaml.load(file, Loader=yaml.FullLoader)
-        #     # take goals_coordinates from the yaml file and store it in variables A, B, C, D, E, F, G, H, I, J
-        # goals_coordinates = data["goals_coordinates"]
-        # A = goals_coordinates["A"]
-        # B = goals_coordinates["B"]
-        # C = goals_coordinates["C"]
-        # D = goals_coordinates["D"]
-        # E = goals_coordinates["E"]
-        # F = goals_coordinates["F"]
-        # G = goals_coordinates["G"]
-        # H = goals_coordinates["H"]
-        # I = goals_coordinates["I"]
-        # J = goals_coordinates["J"]
+        coordinates_lookup = {key: tuple(value['coordinates']) for key, value in self.nodes.items()}
+        
+        for key, value in self.connections.items():
+            coord_key = coordinates_lookup[key]
+            self.map[coord_key] = [(coordinates_lookup[conn['point']], conn['direction']) for conn in value]
 
-        with open('/home/giovanni/Desktop/Mobile_Robots-1/src/planner_pkg/config.yaml', 'r') as file:
-            data = yaml.safe_load(file)['map']
-            nodes = data['nodes']
-            connections = data['connections']
-            
-            # Create a lookup for coordinates by node key
-            coordinates_lookup = {key: tuple(value['coordinates']) for key, value in nodes.items()}
-            
-            for key, value in connections.items():
-                coord_key = coordinates_lookup[key]
-                self.map[coord_key] = [(coordinates_lookup[conn['point']], conn['direction']) for conn in value]
 
         for key, value in self.map.items():
             self.get_logger().info(f"Node {key} has neighbors: {value}")
             self.get_logger().info("\n")
+
 
 
     def compute_next_angle(self, current_angle, result):
@@ -412,11 +387,7 @@ class PlannerHandler(Node):
                 self.get_logger().info("The robot has stopped")
                 self.abort()
 
-                # TODO: terminate the program
-
-                rclpy.shutdown()
-
-                return
+                raise ExitException("The robot has reached the final goal")
 
             self.last_goal = self.next_goal # save the last goal
 
@@ -461,8 +432,12 @@ def main(args=None):
         executor.spin()
     except KeyboardInterrupt:
         pass
-    except Exception as e:
+    
+    except ExitException as e:
+        info.get_logger().info("The robot has reached the final goal")
+    finally:
         info.get_logger().error(f"An error occurred: {e}")
+    
 
     info.destroy_node()
     rclpy.shutdown()
