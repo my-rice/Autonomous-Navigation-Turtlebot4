@@ -50,16 +50,14 @@ def generate_launch_description():
         parameters=[{'service_name': '/planner_server/change_state'}],
     )
     return LaunchDescription([
-        # Localization_node,
-        # Localization_monitor_node,
-        # RegisterEventHandler(
-        #     OnProcessExit(
-        #         target_action=Localization_monitor_node,
-        #         on_exit=[
-        #             LogInfo(msg='Monitor node has finished executing'),
-        #             EmitEvent(event=events.Shutdown(reason='Monitor node completed'))
-        #         ],
-        #     )
+        DeclareLaunchArgument(
+            'config_file',
+            default_value='/home/davide/turtlebot4/Mobile_Robots/src/planner_pkg/config.yaml',
+            description='Path to the config file'
+        ),
+        # IncludeLaunchDescription(
+        #     PythonLaunchDescriptionSource(["/opt/ros/humble/share/turtlebot4_navigation/launch/localization.launch.py"]),
+        #     launch_arguments={'map': 'src/map/diem_map.yaml'}.items()  # Passaggio del parametro "map" al file di lancio localization.launch.py
         # ),
         # RegisterEventHandler(
         #     OnShutdown(

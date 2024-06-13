@@ -3,6 +3,10 @@ from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor 
 from turtlebot4_navigation.turtlebot4_navigator import TurtleBot4Directions, TurtleBot4Navigator
 from geometry_msgs.msg import PoseWithCovarianceStamped
+from irobot_create_msgs.msg import KidnapStatus
+
+# import boolean msg
+from std_msgs.msg import Bool
 
 from rclpy.action import ActionClient
 from discovery_interface.action import DiscoveryAction
@@ -12,6 +16,7 @@ import threading
 import time
 import math
 from pyquaternion import Quaternion
+
 
 
 ENGAGE_DISTANCE = 3
@@ -39,7 +44,13 @@ class DiscoveryActionClient(Node):
         goal_msg.angle = angle
         
         self.get_logger().info('Action server is ready, sending goal ...')
-        return self.action_client.send_goal_async(goal_msg)
+        self.current_goal_handle = self.action_client.send_goal_async(goal_msg)  
+        return self.current_goal_handle
+
+    def cancel_goal(self):
+        if self.current_goal_handle is not None:
+            self.action_client.cancel_goal_async(self.current_goal_handle)
+            self.get_logger().info('Goal cancelled.')
 
     def wait_for_server(self, timeout_sec=1.0):
         if(self.action_client.wait_for_server(timeout_sec)):
@@ -57,7 +68,13 @@ class PlannerHandler(Node):
     def __init__(self):
         super().__init__("Info") # Init node
         self.sub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
+        
+        
+        # self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, 10)
+        
 
+        self.test_sub = self.create_subscription(Bool, "/test", self.test_callback, 10)
+        
         # Create an action client for the discovery mode
         self.discovery_action_client = DiscoveryActionClient()
         self.declare_parameter('config_file', '')
@@ -70,11 +87,13 @@ class PlannerHandler(Node):
         self.navigator = TurtleBot4Navigator()
         self.initial_pose_flag = False
         self.first_discovery = True
+        self.is_kidnapped = False
         self.flag = True
-        # Wait for Nav2
+
+
+        self.last_kidnapped = False
+        # Wait for Nav2.
         # self.navigator.waitUntilNav2Active()
-
-
 
         self.build_p_map()
         # Wait for the initial pose
@@ -111,6 +130,26 @@ class PlannerHandler(Node):
         self.get_logger().info(f"Pose callback: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
         
 
+    def kidnapped_callback(self, msg):
+        self.is_kidnapped = msg.is_kidnapped
+        self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
+        
+
+    def test_callback(self, msg):
+        self.is_kidnapped = msg.data
+        self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
+
+        if self.is_kidnapped == True and self.last_kidnapped == False:
+            # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
+            self.get_logger().info("The robot is in kidnapped mode")
+            self.abort() # abort the current goal
+
+        if self.is_kidnapped == False and self.last_kidnapped == True:
+            self.get_logger().info("The robot is deployed")
+            self.relocate()     
+        self.last_kidnapped = self.is_kidnapped
+
+
 
     def build_p_map(self):
         self.get_logger().info("Building the map")
@@ -142,34 +181,10 @@ class PlannerHandler(Node):
             coord_key = coordinates_lookup[key]
             self.map[coord_key] = [(coordinates_lookup[conn['point']], conn['direction']) for conn in value]
 
-
         for key, value in self.map.items():
             self.get_logger().info(f"Node {key} has neighbors: {value}")
             self.get_logger().info("\n")
 
-        #for every point and neightbors in the map, run the get_intersection_points function to get the nearest intersection point
-        
-        # TODO: For now it is hardcoded. It has be changed
-        # A = (57.5, -2)
-        # B = (56.5,-11.5)
-        # C = (38,-1)
-        # D = (38,-10)
-        # E = (17.5,-0.5)
-        # F = (17.2,-10)
-        # G = (-2.5,0)
-        # H = (-3.5,-9.5)
-        # I = (-22,0.5)
-        # J = (-22,-8.5)
-        # self.map[A] = [(B,"right"), (C,"down")]
-        # self.map[B] = [(A,"left"), (D,"down")]
-        # self.map[C] = [(A,"up"), (D,"right"), (E,"down")]
-        # self.map[D] = [(B,"up"), (C,"left"), (F,"down")]
-        # self.map[E] = [(C,"up"), (F,"right"), (G,"down")]
-        # self.map[F] = [(D,"up"), (E,"left"), (H,"down")]
-        # self.map[G] = [(E,"up"), (H,"right"), (I,"down")]
-        # self.map[H] = [(F,"up"), (G,"left"), (J,"down")]
-        # self.map[I] = [(G,"up"), (J,"right")]
-        # self.map[J] = [(H,"up"), (I,"left")]
 
     def compute_next_angle(self, current_angle, result):
         if result == "right":
@@ -198,7 +213,7 @@ class PlannerHandler(Node):
 
         next_goal_angle = self.compute_next_angle(next_goal_angle, result)
 
-        if next_goal_angle < 45 or next_goal_angle >= 315:
+        if next_goal_angle < 45 or next_goal_angle >= 315: # TODO: change this to directions N, E, S, W
             next_goal_angle = "right"
         elif next_goal_angle < 135:
             next_goal_angle = "up"
@@ -230,15 +245,13 @@ class PlannerHandler(Node):
         else:
             return intersection_points[::-1] # reverse the list
 
-    def discovery_mode(self):
+    def discovery_mode(self,current_pose):
 
         self.get_logger().info("The robot is in discovery mode")
         
-        
-        # get the current pose of the robot
-        x = self.amcl_pose.pose.pose.position.x
-        y = self.amcl_pose.pose.pose.position.y
-        theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
+        x = current_pose[0]
+        y = current_pose[1]
+        theta = current_pose[2]
 
         # find the nearest goal if it is the first discovery
         if self.first_discovery == True:
@@ -250,15 +263,7 @@ class PlannerHandler(Node):
                     min_distance = distance
                     self.next_goal = goal
         
-        # select a random neighbor of the nearest goal
-        # neighbors = self.map[nearest_goal]
-        # next_goal = neighbors[random.randint(0, len(neighbors) - 1)]
-
         
-        # ****************************
-        # send the goal to the discovery action server and wait for the result
-
-        # next_goal_discovery = self.blabla(next_goal,nearest_goal) # DARE QUELLO DOPO
         if(self.first_discovery == True):
             self.get_logger().info("The first discovery")
             discovery_goal_intersects, angle = self.get_intersection_points(self.next_goal, theta, "straighton")
@@ -267,7 +272,7 @@ class PlannerHandler(Node):
             self.first_discovery = False
             self.get_logger().info("THe action payload is: " + str(self.action_payload )+ "and the nearest goal is: " + str(self.next_goal))
 
-
+        # send the goal to the discovery action server and wait for the result
         future = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]))
         rclpy.spin_until_future_complete(self.discovery_action_client, future)
 
@@ -277,26 +282,11 @@ class PlannerHandler(Node):
 
         result = get_result_future.result().result.next_action
 
-        self.get_logger().info("RESULT: " + str(result))
-        self.last_goal = self.next_goal
-        self.next_goal = self.action_result2goal(result, (x, y, theta), self.next_goal)
+        return result
         
-
-        intersection_points, angle = self.get_intersection_points(self.next_goal, theta, result)
-        
-
-        points = self.order_by_distance(intersection_points, x, y)
-        self.nav_goal = (points[0][0], points[0][1], angle)
-        self.action_payload = (points[1][0],points[1][1],angle)
-        
-        self.get_logger().info("THe nav goal is: " + str(self.nav_goal))
-        self.get_logger().info("THe action payload is: " + str(self.action_payload))
-        
-    def get_intersection_points(self, next_goal, theta, result):
+    def get_intersection_points(self, next_goal, theta, result="straighton",rho=1):
         x1,y1 = next_goal
 
-        # Parametri del cerchio
-        rho = 3.4
         xc, yc = next_goal
 
         # Convert frame angle to standard frame (remove the offset)
@@ -347,6 +337,7 @@ class PlannerHandler(Node):
         return intersection_points, angle
 
     def start_navigation(self, x, y, angle=0):
+        
         self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
 
     def get_angle(self, quaternion):
@@ -357,44 +348,96 @@ class PlannerHandler(Node):
         theta = yaw * 180 / 3.14159265359
         return theta
 
+    def relocate(self):
+        self.get_logger().info("Relocating the robot")
+        ### Get the ideal relocation pose of the robot
+        points, angle = self.get_intersection_points(self.last_goal,self.nav_goal[2],"straighton",rho=4)
+        points = self.order_by_distance(points, self.nav_goal[0], self.nav_goal[1])
+        self.ideal_relocation = points[0]
+    
+        self.navigator.setInitialPose(self.navigator.getPoseStamped(self.ideal_relocation, angle))
+        self.get_logger().info("The ideal relocation is: " + str(self.ideal_relocation))
+        
+
+    # def kidnapped_mode(self):
+        # self.relocate() # TODO: change the name of the function
+        # while self.is_kidnapped:
+        #     self.get_logger().info("The robot is still kidnapped")
+        #     time.sleep(0.5)
+        
+        # self.get_logger().info("The robot is no longer kidnapped")
+        # self.flag = True
+        # if the robot has been kidnapped, then we need to recompute the current location
+
+
+    def abort(self):
+        # Cancel the current goal
+        self.get_logger().info("Aborting the current goal")
+        if self.nav_thread is not None:
+            self.navigator.cancelTask()
+            self.nav_thread.join()
+            self.nav_thread = None
+            self.flag = True
+
 
 
     def run(self):
         
-        if self.amcl_pose is None or self.initial_pose_flag == False:
-            self.get_logger().info("Waiting for the initial pose")
+        if self.amcl_pose is None or self.initial_pose_flag == False or self.is_kidnapped:
             return        
 
         if self.flag and (self.nav_thread is None or not self.nav_thread.is_alive()):
-            self.flag = False 
-            # if the robot is in proximity of the goal, then we need to discover the next goal and start the navigation
-            self.discovery_mode()
+            self.flag = False #TODO change the name of the flag, it is not clear!!! 
+
+
+            # get the current pose of the robot
+            x = self.amcl_pose.pose.pose.position.x
+            y = self.amcl_pose.pose.pose.position.y
+            theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
+
+            # Transition to discovery mode
+            result = self.discovery_mode((x, y, theta))
+            self.get_logger().info("RESULT: " + str(result))
+            
+            # if the result is stop, then it means that the robot has reached the final goal
+            if result == "stop":
+                self.get_logger().info("The robot has stopped")
+                self.abort()
+
+                # TODO: terminate the program
+
+                rclpy.shutdown()
+
+                return
+
+            self.last_goal = self.next_goal # save the last goal
+
+            # compute the next goal based on the result
+            self.next_goal = self.action_result2goal(result, (x, y, theta), self.next_goal)
+            
+            # compute the navigation goal: which is a particular point on the way to the next goal where the robot has to search for the road sign
+            intersection_points, angle = self.get_intersection_points(self.next_goal, theta, result)
+            points = self.order_by_distance(intersection_points, x, y)
+            self.nav_goal = (points[0][0], points[0][1], angle)
+            self.action_payload = (points[1][0],points[1][1],angle)
+            
+            self.get_logger().info("THe nav goal is: " + str(self.nav_goal))
+            self.get_logger().info("THe action payload is: " + str(self.action_payload))
+
             self.get_logger().info(f"***\n NEXT GOAL: {self.next_goal} \n***")
-            x, y ,angle= map(float, self.nav_goal)
-            # angle = self.get_angle(self.amcl_pose.pose.pose.orientation)
+        
             # Start the navigation in a separate thread
+            x, y ,angle= map(float, self.nav_goal)
             self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y, angle))
             self.nav_thread.start()
-            #
         
         if not self.nav_thread.is_alive():
+            # if the robot has reached the goal, then we need to join the thread and set the flag to True, so that the robot can compute the next goal
             self.flag = True
             self.nav_thread.join()
             self.nav_thread = None
 
-        # if self.nav_thread.is_alive():
-            # if the robot is near 1 meter from the goal, then the robot has reached the goal, so we kill the thread
-            # distance = (self.amcl_pose.pose.pose.position.x - self.next_goal[0]) ** 2 + (self.amcl_pose.pose.pose.position.y - self.next_goal[1]) ** 2
-            # self.get_logger().info(f"Distance: {distance}")
-            # if distance < ENGAGE_DISTANCE:
-            #     self.get_logger().info("The robot has reached the goal, killing the thread")
-            #     self.navigator.cancelTask()
-            #     self.nav_thread.join()
-            #     self.nav_thread = None
-            #     self.flag = True
 
-
-        # if the robot is near 1 meter from the goal, then the robot has reached the goal, so we kill the thread
 
 
 
@@ -410,6 +453,8 @@ def main(args=None):
         executor.spin()
     except KeyboardInterrupt:
         pass
+    except Exception as e:
+        info.get_logger().error(f"An error occurred: {e}")
 
     info.destroy_node()
     rclpy.shutdown()
