@@ -263,7 +263,7 @@ class PlannerHandler(Node):
         self.get_logger().info("spin 2")
         goal_handle = future_goal.result()
         get_result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self, get_result_future)
+        rclpy.spin_until_future_complete(self.discovery_action_client, get_result_future)
         self.get_logger().info("spin 3")
         result = get_result_future.result().result.next_action
         self.get_logger().info("spin 4" + result)
