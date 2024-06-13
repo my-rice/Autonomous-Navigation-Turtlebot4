@@ -62,7 +62,8 @@ class PlannerHandler(Node):
         self.discovery_action_client = DiscoveryActionClient()
         self.declare_parameter('config_file', '')
         self.config_path = self.get_parameter('config_file').get_parameter_value().string_value
-        self.read_parameters(self.config_path)
+        self.get_logger().info("Config file: " + self.config_path)
+        self.read_parameters()
         print("Timer period: ", self.timer, "Timeout: ", self.timeout)
         self.amcl_pose = None
         self.nav_thread = None
@@ -86,32 +87,26 @@ class PlannerHandler(Node):
        
         #self.next_goal = self.discovery_mode() # The first thing self.run() will do is to call self.discovery_mode()
 
-        # Create a timer that triggers every second
-        while self.initial_pose_flag == False:
-            # get the confirmation that the initial pose has been set by the user in rviz
-            self.get_logger().info("Waiting for the initial pose")
-            input("Press Enter to confirm the initial pose")
-            self.initial_pose_flag = True
-            self.get_logger().info("Initial pose set")
+        
 
-        while self.amcl_pose is None:
-            self.get_logger().info("Waiting for the initial pose")
-            rclpy.spin_once(self)
+      
 
 
-        self.timer = self.create_timer(self.timer_period, self.run)
+        self.timer = self.create_timer(self.timer, self.run)
 
-    def read_parameters(self, config_path):
-        if config_path is None:
-            config_path = 'src/planner_pkg/config.yaml'
-
-        with open(config_path, 'r') as file:
+    def read_parameters(self):
+        self.get_logger().info("Reading parameters from the config file: " + self.config_path)
+        with open(self.config_path, 'r') as file:
             config = yaml.safe_load(file)
 
         self.timer = config['planner_parameters']['timer_period']
         self.timeout = config['planner_parameters']['timeout']
+        self.nodes = config['map']['nodes']
+        self.connections = config['map']['connections']
 
     def pose_callback(self, msg):
+        if(not self.initial_pose_flag):
+            self.initial_pose_flag = True
         self.amcl_pose = msg
         self.get_logger().info(f"Pose callback: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
         
@@ -138,17 +133,14 @@ class PlannerHandler(Node):
         # I = goals_coordinates["I"]
         # J = goals_coordinates["J"]
 
-        with open('/home/giovanni/Desktop/Mobile_Robots-1/src/planner_pkg/config.yaml', 'r') as file:
-            data = yaml.safe_load(file)['map']
-            nodes = data['nodes']
-            connections = data['connections']
+        
             
             # Create a lookup for coordinates by node key
-            coordinates_lookup = {key: tuple(value['coordinates']) for key, value in nodes.items()}
-            
-            for key, value in connections.items():
-                coord_key = coordinates_lookup[key]
-                self.map[coord_key] = [(coordinates_lookup[conn['point']], conn['direction']) for conn in value]
+        coordinates_lookup = {key: tuple(value['coordinates']) for key, value in self.nodes.items()}
+        
+        for key, value in self.connections.items():
+            coord_key = coordinates_lookup[key]
+            self.map[coord_key] = [(coordinates_lookup[conn['point']], conn['direction']) for conn in value]
 
 
         for key, value in self.map.items():
@@ -370,6 +362,7 @@ class PlannerHandler(Node):
     def run(self):
         
         if self.amcl_pose is None or self.initial_pose_flag == False:
+            self.get_logger().info("Waiting for the initial pose")
             return        
 
         if self.flag and (self.nav_thread is None or not self.nav_thread.is_alive()):
