@@ -65,8 +65,8 @@ class DiscoveryActionClient(Node):
             return True
         return False
 
-    def get_result_callback(self, future):
-        result = future.result().result
+    def get_result_callback(self, future_handle):
+        result = future_handle.result().result
         self.get_logger().info('Result: {0}'.format(result.next_action))
         return result.next_action
 
@@ -257,13 +257,13 @@ class PlannerHandler(Node):
 
         self.get_logger().info("spin 1")
         # send the goal to the discovery action server and wait for the result
-        future = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]))
-        rclpy.spin_until_future_complete(self.discovery_action_client, future)
+        future_goal = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]))
+        rclpy.spin_until_future_complete(self.discovery_action_client, future_goal)
 
         self.get_logger().info("spin 2")
-        goal_handle = future.result()
+        goal_handle = future_goal.result()
         get_result_future = goal_handle.get_result_async()
-        rclpy.spin_until_future_complete(self.discovery_action_client, get_result_future)
+        rclpy.spin_until_future_complete(self, get_result_future)
         self.get_logger().info("spin 3")
         result = get_result_future.result().result.next_action
         self.get_logger().info("spin 4" + result)
@@ -381,6 +381,8 @@ class PlannerHandler(Node):
 
             # Transition to discovery mode
             result = self.discovery_mode((x, y, theta))
+
+
             self.get_logger().info("RESULT: " + str(result))
             
             # if the result is stop, then it means that the robot has reached the final goal

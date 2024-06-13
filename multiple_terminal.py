@@ -16,4 +16,4 @@ commands = [
 
 for cmd in commands:
     subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', f'echo -e "\033[32mLaunching command: {cmd}\033[0m"; {cmd}; exec bash'])
-    time.sleep(4)
+    time.sleep(1)

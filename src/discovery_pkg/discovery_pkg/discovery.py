@@ -189,6 +189,9 @@ class Discovery(Node):
             #     result.next_action = self.signal
             # else:
             #     result.next_action = "Error"
+
+            self.get_logger().info(f"Signal: {self.signal}")
+
             if(self.signal is None):
                     result.next_action = "right" 
             else:
