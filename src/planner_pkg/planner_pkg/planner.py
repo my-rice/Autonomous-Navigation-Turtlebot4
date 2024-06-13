@@ -43,7 +43,6 @@ class DiscoveryActionClient(Node):
         goal_msg.start_pose_y = start_pose_y
         goal_msg.angle = angle
         
-        self.action_client.wait_for_server()
         self.get_logger().info('Action server is ready, sending goal ...')
         self.current_goal_handle = self.action_client.send_goal_async(goal_msg)  
         return self.current_goal_handle
@@ -52,6 +51,11 @@ class DiscoveryActionClient(Node):
         if self.current_goal_handle is not None:
             self.action_client.cancel_goal_async(self.current_goal_handle)
             self.get_logger().info('Goal cancelled.')
+
+    def wait_for_server(self, timeout_sec=1.0):
+        if(self.action_client.wait_for_server(timeout_sec)):
+            return True
+        return False
 
     def get_result_callback(self, future):
         result = future.result().result
@@ -73,10 +77,10 @@ class PlannerHandler(Node):
         
         # Create an action client for the discovery mode
         self.discovery_action_client = DiscoveryActionClient()
-        #self.declare_parameter('config_file', '')
-        #self.config_path = self.get_parameter('config_file').get_parameter_value().string_value
-        self.config_path = "/home/davide/turtlebot4/Mobile_Robots/src/planner_pkg/config.yaml" # TODO: change this
-
+        self.declare_parameter('config_file', '')
+        self.config_path = self.get_parameter('config_file').get_parameter_value().string_value
+        self.read_parameters(self.config_path)
+        print("Timer period: ", self.timer, "Timeout: ", self.timeout)
         self.amcl_pose = None
         self.nav_thread = None
         self.navigator = TurtleBot4Navigator()
@@ -92,7 +96,16 @@ class PlannerHandler(Node):
 
         self.build_p_map()
         # Wait for the initial pose
+        if(self.discovery_action_client.wait_for_server(self.timeout)):
+            self.get_logger().info("Action server is ready")
+        else:
+            self.get_logger().info("Action server is not ready, shutting down...")
+            rclpy.shutdown()
+            exit()
+       
+        #self.next_goal = self.discovery_mode() # The first thing self.run() will do is to call self.discovery_mode()
 
+        # Create a timer that triggers every second
         while self.initial_pose_flag == False:
             # get the confirmation that the initial pose has been set by the user in rviz
             self.get_logger().info("Waiting for the initial pose")
@@ -104,8 +117,18 @@ class PlannerHandler(Node):
             self.get_logger().info("Waiting for the initial pose")
             rclpy.spin_once(self)
 
-        # Create a timer that triggers every second
-        self.timer = self.create_timer(2, self.run)
+
+        self.timer = self.create_timer(self.timer_period, self.run)
+
+    def read_parameters(self, config_path):
+        if config_path is None:
+            config_path = 'src/planner_pkg/config.yaml'
+
+        with open(config_path, 'r') as file:
+            config = yaml.safe_load(file)
+
+        self.timer = config['planner_parameters']['timer_period']
+        self.timeout = config['planner_parameters']['timeout']
 
     def pose_callback(self, msg):
         self.amcl_pose = msg
@@ -138,7 +161,23 @@ class PlannerHandler(Node):
         
         self.map = dict()
 
-        with open(self.config_path, 'r') as file:
+        # TODO: how to read the yaml file from a ros2 node? The following code does not work
+        # with open("config.yaml") as file: 
+        #     data = yaml.load(file, Loader=yaml.FullLoader)
+        #     # take goals_coordinates from the yaml file and store it in variables A, B, C, D, E, F, G, H, I, J
+        # goals_coordinates = data["goals_coordinates"]
+        # A = goals_coordinates["A"]
+        # B = goals_coordinates["B"]
+        # C = goals_coordinates["C"]
+        # D = goals_coordinates["D"]
+        # E = goals_coordinates["E"]
+        # F = goals_coordinates["F"]
+        # G = goals_coordinates["G"]
+        # H = goals_coordinates["H"]
+        # I = goals_coordinates["I"]
+        # J = goals_coordinates["J"]
+
+        with open('/home/giovanni/Desktop/Mobile_Robots-1/src/planner_pkg/config.yaml', 'r') as file:
             data = yaml.safe_load(file)['map']
             nodes = data['nodes']
             connections = data['connections']

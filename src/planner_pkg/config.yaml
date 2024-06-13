@@ -13,26 +13,26 @@
 map:
   nodes:
     A:
-      coordinates: [57.5, -2]
+      coordinates: [58.4, -2]
     B:
-      coordinates: [56.5, -11.5]
+      coordinates: [57.9, -11.5]
     C:
-      coordinates: [38, -1]
+      coordinates: [38.1, -0.878]
     D:
-      coordinates: [38, -10]
+      coordinates: [37.5, -10.6]
     E:
-      coordinates: [17.5, -0.5]
+      coordinates: [17.4, -0.322]
     F:
-      coordinates: [17.2, -10]
+      coordinates: [17.2, -9.81]
     G:
-      coordinates: [-2.5, 0]
+      coordinates: [-2.85, -0.05]
     H:
-      coordinates: [-3.5, -9.5]
+      coordinates: [-3.21, -9.49]
     I:
-      coordinates: [-22, 0.5]
+      coordinates: [-23.5, 0.522]
     J:
-      coordinates: [-22, -8.5]
-
+      coordinates: [-23.9, -8.85]
+ 
   connections:
     A:
       - point: B
@@ -96,5 +96,6 @@ map:
         direction: up
       - point: I
         direction: left
-
-timer: 0.1
+planner_parameters:
+  timer_period: 0.1
+  timeout: 10.0

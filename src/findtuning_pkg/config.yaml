@@ -1,0 +1,22 @@
+map:
+  nodes:
+    A:
+      coordinates: [58.4, -2]
+    B:
+      coordinates: [57.9, -11.5]
+    C:
+      coordinates: [38.1, -0.878]
+    D:
+      coordinates: [37.5, -10.6]
+    E:
+      coordinates: [17.4, -0.322]
+    F:
+      coordinates: [17.2, -9.81]
+    G:
+      coordinates: [-2.85, -0.05]
+    H:
+      coordinates: [-3.21, -9.49]
+    I:
+      coordinates: [-23.5, 0.522]
+    J:
+      coordinates: [-23.9, -8.85]
