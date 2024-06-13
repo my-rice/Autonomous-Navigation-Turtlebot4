@@ -111,7 +111,7 @@ class Discovery(Node):
         increment_y = (goal_y - start_y) / n_points
         points = []
 
-        for i in range(n_points):
+        for i in range(1,n_points):
             x = start_x + increment_x * i
             y = start_y + increment_y * i
             points.append((x, y, angle))
@@ -123,21 +123,31 @@ class Discovery(Node):
     def start_navigation(self, goal_x, goal_y, angle, start_x, start_y, n_points):
         # points = self.policy_arc(goal_x, goal_y, angle, start_x, start_y)
         points = self.policy_straight(goal_x, goal_y, angle, start_x, start_y, n_points)
-        for point in points:
+        for num_points,point in enumerate(points):
             self.get_logger().info(f"Point: {point}")
-            for i in [0,-1,1]:
+            for i in [-1,1]:
                 try:
-                    self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]+i*65))
-                    time.sleep(0.5)
+                    self.navigator.spin(i*45)
                     if self.founded == True:
                         self.get_logger().info(f"Founded signal: {self.signal}")
                         break
+                    time.sleep(0.5)
                 except Exception as e:
                     self.get_logger().info(f"Error: {e}")
                     self.signal = "Error"
                     break
-            time.sleep(0.5)
-
+            if(num_points == len(points)-1):
+                break
+            try:
+                self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
+                if self.founded == True:
+                    self.get_logger().info(f"Founded signal: {self.signal}")
+                    break
+                time.sleep(0.5)
+            except Exception as e:
+                self.get_logger().info(f"Error: {e}")
+                self.signal = "Error"
+                break
 
         #self.navigator.startToPose(self.navigator.getPoseStamped((goal_x, goal_y), angle))
         # if(self.signal is None):

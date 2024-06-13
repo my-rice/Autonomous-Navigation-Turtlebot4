@@ -87,7 +87,8 @@ class PlannerHandler(Node):
         self.discovery_action_client = DiscoveryActionClient()
         self.declare_parameter('config_file', '')
         self.config_path = self.get_parameter('config_file').get_parameter_value().string_value
-        self.read_parameters(self.config_path)
+        self.get_logger().info("Config file: " + self.config_path)
+        self.read_parameters()
         print("Timer period: ", self.timer, "Timeout: ", self.timeout)
         self.amcl_pose = None
         self.nav_thread = None
@@ -161,7 +162,6 @@ class PlannerHandler(Node):
         for key, value in self.connections.items():
             coord_key = coordinates_lookup[key]
             self.map[coord_key] = [(coordinates_lookup[conn['point']], conn['direction']) for conn in value]
-
 
         for key, value in self.map.items():
             self.get_logger().info(f"Node {key} has neighbors: {value}")
