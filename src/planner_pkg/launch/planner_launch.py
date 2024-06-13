@@ -6,6 +6,7 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.actions import DeclareLaunchArgument
 
 def generate_launch_description():
     config_path = PathJoinSubstitution([FindPackageShare('planner_pkg'), 'config', 'config.yaml'])
@@ -50,38 +51,40 @@ def generate_launch_description():
         parameters=[{'service_name': '/planner_server/change_state'}],
     )
     return LaunchDescription([
-        DeclareLaunchArgument(
-            'config_file',
-            default_value='/home/davide/turtlebot4/Mobile_Robots/src/planner_pkg/config.yaml',
-            description='Path to the config file'
+       Localization_node,
+       Localization_monitor_node,
+       RegisterEventHandler(
+            OnProcessExit(
+                target_action=Localization_monitor_node,
+                on_exit=[
+                    LogInfo(msg='Monitor node has finished executing'),
+                    EmitEvent(event=events.Shutdown(reason='Monitor node completed'))
+                ],
+            )
         ),
-        # IncludeLaunchDescription(
-        #     PythonLaunchDescriptionSource(["/opt/ros/humble/share/turtlebot4_navigation/launch/localization.launch.py"]),
-        #     launch_arguments={'map': 'src/map/diem_map.yaml'}.items()  # Passaggio del parametro "map" al file di lancio localization.launch.py
-        # ),
-        # RegisterEventHandler(
-        #     OnShutdown(
-        #         on_shutdown=[
-        #             Navigation_node
-        #         ]
-        #     )
-        # ),
-        # Navigation_monitor_node,
-        View_robot_node
-        # RegisterEventHandler(
-        #     OnProcessExit(
-        #         target_action=Navigation_monitor_node,
-        #         on_exit=[
-        #             LogInfo(msg='Monitor node has finished executing'),
-        #             EmitEvent(event=events.Shutdown(reason='Monitor node completed'))
-        #         ],
-        #     )
-        # ),
-        # RegisterEventHandler(
-        #     OnShutdown(
-        #         on_shutdown=[
-        #             View_robot_node, Planner_node
-        #         ]
-        #     )
-        # ),
+        RegisterEventHandler(
+            OnShutdown(
+                on_shutdown=[
+                    Navigation_node
+                ]
+            )
+        ),
+        Navigation_monitor_node,
+        RegisterEventHandler(
+            OnProcessExit(
+                target_action=Navigation_monitor_node,
+                on_exit=[
+                    LogInfo(msg='Monitor node has finished executing'),
+                    EmitEvent(event=events.Shutdown(reason='Monitor node completed'))
+                ],
+            )
+        ),
+        RegisterEventHandler(
+            OnShutdown(
+                on_shutdown=[
+                    View_robot_node, Planner_node
+                ]
+            )
+        ),
+        
     ])
