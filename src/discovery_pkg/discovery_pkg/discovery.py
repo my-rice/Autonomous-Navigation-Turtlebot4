@@ -127,11 +127,13 @@ class Discovery(Node):
             self.get_logger().info(f"Point: {point}")
             for i in [-1,2]:
                 try:
-                    self.navigator.spin(math.radians(i*45))
+                    self.get_logger().info(f"Start spinning")
+                    temp = self.navigator.spin(1.57)
+                    self.get_logger().info(f"Spin: {temp}")
                     if self.founded == True:
                         self.get_logger().info(f"Founded signal: {self.signal}")
                         break
-                    time.sleep(0.5)
+                    time.sleep(1)
                 except Exception as e:
                     self.get_logger().info(f"Error: {e}")
                     self.signal = "Error"
@@ -208,8 +210,8 @@ class Discovery(Node):
             # if(self.signal is None):
             #     result.next_action = "straighton"
             self.in_discovery = False
-
-        return result
+            self.get_logger().info("result next action: " + result.next_action)
+            return result
 
 
 

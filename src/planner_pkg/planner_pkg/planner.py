@@ -255,16 +255,18 @@ class PlannerHandler(Node):
             self.first_discovery = False
             self.get_logger().info("THe action payload is: " + str(self.action_payload )+ "and the nearest goal is: " + str(self.next_goal))
 
+        self.get_logger().info("spin 1")
         # send the goal to the discovery action server and wait for the result
         future = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]))
         rclpy.spin_until_future_complete(self.discovery_action_client, future)
 
+        self.get_logger().info("spin 2")
         goal_handle = future.result()
         get_result_future = goal_handle.get_result_async()
         rclpy.spin_until_future_complete(self.discovery_action_client, get_result_future)
-
+        self.get_logger().info("spin 3")
         result = get_result_future.result().result.next_action
-
+        self.get_logger().info("spin 4" + result)
         return result
         
     def get_intersection_points(self, next_goal, theta, result="straighton",rho=1):
@@ -320,7 +322,6 @@ class PlannerHandler(Node):
         return intersection_points, angle
 
     def start_navigation(self, x, y, angle=0):
-        
         self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
 
     def get_angle(self, quaternion):
