@@ -19,6 +19,8 @@ setup(
 
         #Worlds
         (os.path.join('share', package_name, 'worlds'), glob(os.path.join('worlds', '*.sdf'))),
+        (os.path.join('share', package_name, 'worlds', 'diem_map'), glob(os.path.join('worlds', 'diem_map', '*.*'))),
+        (os.path.join('share', package_name, 'worlds', 'diem_map', 'meshes'), glob(os.path.join('worlds', 'diem_map', 'meshes', '*.stl'))),
 
     ],
     install_requires=['setuptools'],

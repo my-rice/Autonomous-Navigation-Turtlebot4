@@ -87,6 +87,8 @@ def generate_launch_description():
             ('ign_args', [LaunchConfiguration('world'),
                           '.sdf',
                           ' -v 4',
+                          ' --render-engine ',
+                          'ogre2',
                           ' --gui-config ',
                           PathJoinSubstitution(
                             [pkg_turtlebot4_ignition_bringup,
