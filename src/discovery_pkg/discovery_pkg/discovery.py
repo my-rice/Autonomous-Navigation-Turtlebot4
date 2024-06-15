@@ -32,12 +32,12 @@ class Discovery(Node):
 
         self.nav_thread = None
         self.cancel_requested = False
-        self.service_up = False
         # Create a subscription for the /tests topic
         self.sub = self.create_subscription(String, '/output_command', self.signal_callback, 10)
         #self.doublesub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
         self.mutex = threading.Lock()
 
+        self.service_done = False
         self.client = self.create_client(ChangeState, 'lifecycle_perception/change_state')
         self.wait_for_service()
         self.req = ChangeState.Request()
@@ -81,6 +81,7 @@ class Discovery(Node):
             self.get_logger().info("Service is not ready, shutting down...")
             rclpy.shutdown()
             exit()
+        self.service_done = False
 
     def policy_straight(self, goal_x, goal_y, angle, start_x, start_y, n_points=4):
         r = math.sqrt((goal_x - start_x)**2 + (goal_y - start_y)**2)
@@ -135,15 +136,15 @@ class Discovery(Node):
     
 
     def discovery_mode_callback(self, goal_handle):
-        self.get_logger().info("Discovery mode callback")
-        # self.wait_for_service()
-        # self.get_logger().info("Service is ready")
-        # self.req.transition.id = 3
-        # future = self.client.call_async(self.req)
-        # future.add_done_callback(self.handle_service_response)
-        # while not self.service_up:
-        #     self.get_logger().info("Waiting for service to be up")
-        #     rclpy.spin_once(self, timeout_sec=1)
+        self.get_logger().info("Received request")
+        self.wait_for_service()
+        self.req.transition.id = 3
+        future = self.client.call_async(self.req)
+        future.add_done_callback(self.handle_service_response)
+        while not self.service_done:
+            self.get_logger().info("Waiting for service to be up")
+            rclpy.spin_once(self, timeout_sec=1)
+
 
         self.get_logger().info("Service is up")
         goal = goal_handle.request
@@ -163,10 +164,13 @@ class Discovery(Node):
         # Wait for the navigation to complete, allowing other callbacks to be processed
         self.nav_thread.join()  # Wait until the navigation thread completes
         self.nav_thread = None
-        # self.wait_for_service()
-        # self.req.transition.id = 4
-        # future = self.client.call_async(self.req)
-        # future.add_done_callback(self.handle_service_response)
+        self.wait_for_service()
+        self.req.transition.id = 4
+        future = self.client.call_async(self.req)
+        future.add_done_callback(self.handle_service_response)
+        while not self.service_done:
+            self.get_logger().info("Waiting for service to be up")
+            rclpy.spin_once(self, timeout_sec=1)
         if self.cancel_requested:
             goal_handle.abort()
             self.cancel_requested = False
@@ -193,10 +197,10 @@ class Discovery(Node):
         response = future.result()
         if response.success:
             self.get_logger().info("Operazione di servizio completata con successo")
-            self.service_up=True
+            self.service_done=True
         else:
             self.get_logger().info("Operazione di servizio fallita")
-            self.service_up=False
+            self.service_done=False
         # Qui puoi aggiungere ulteriore logica per gestire la risposta
 
     def signal_callback(self, msg):
