@@ -268,8 +268,9 @@ class PlannerHandler(Node):
             self.first_discovery = False
             self.get_logger().info("THe action payload is: " + str(self.action_payload )+ "and the nearest goal is: " + str(self.next_goal))
 
-        self.get_logger().info("spin 1")
+        self.get_logger().info("sending the goal to the discovery action server: " + str(self.action_payload) + " and the current pose is: " + str(current_pose))
         # send the goal to the discovery action server and wait for the result
+
         future_goal = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]))
         rclpy.spin_until_future_complete(self.discovery_action_client, future_goal)
 
