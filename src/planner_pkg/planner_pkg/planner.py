@@ -18,10 +18,6 @@ import math
 from pyquaternion import Quaternion
 
 
-
-ENGAGE_DISTANCE = 3
-
-
 class GoalNotValidException(Exception):
     """Exception raised when the goal is not valid."""
 
@@ -80,9 +76,17 @@ class PlannerHandler(Node):
         
         # self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, 10)
         
-
+        # TOPIC FOR TESTING PURPOSES: to test the recovery mode, we need to kidnap the robot
         self.test_sub = self.create_subscription(Bool, "/test", self.test_callback, 10)
         
+
+        self.subscription = self.create_subscription(
+            PoseWithCovarianceStamped,
+            '/initialpose',
+            self.listener_callback,
+            10)
+        self.subscription  # prevent unused variable warning
+
         # Create an action client for the discovery mode
         self.discovery_action_client = DiscoveryActionClient()
         self.declare_parameter('config_file', '')
@@ -100,11 +104,15 @@ class PlannerHandler(Node):
 
 
         self.last_kidnapped = False
-        # Wait for Nav2.
-        # self.navigator.waitUntilNav2Active()
 
         self.build_p_map()
-        # Wait for the initial pose
+        # Wait for Nav2.
+
+        while self.initial_pose_flag == False:
+            rclpy.spin_once(self, timeout_sec=1)
+
+        self.navigator.waitUntilNav2Active()
+
         if(self.discovery_action_client.wait_for_server(self.timeout)):
             self.get_logger().info("Action server is ready")
         else:
@@ -125,8 +133,8 @@ class PlannerHandler(Node):
         self.connections = config['map']['connections']
 
     def pose_callback(self, msg):
-        if(not self.initial_pose_flag):
-            self.initial_pose_flag = True
+        # if(not self.initial_pose_flag):
+        #     self.initial_pose_flag = True
         self.amcl_pose = msg
         self.get_logger().info(f"Pose callback: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
         
@@ -135,6 +143,14 @@ class PlannerHandler(Node):
         self.is_kidnapped = msg.is_kidnapped
         self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
         
+    def listener_callback(self, msg):
+
+        if self.initial_pose_flag == False:
+            self.initial_pose_flag = True
+            angle = self.get_angle(msg.pose.pose.orientation)
+            initial_pose = self.navigator.getPoseStamped([msg.pose.pose.position.x, msg.pose.pose.position.y], angle)
+            self.navigator.setInitialPose(initial_pose)
+            self.get_logger().info('Initial pose received: {0} {1} {2}'.format(msg.pose.pose.position.x, msg.pose.pose.position.y, angle))
 
     def test_callback(self, msg):
         self.is_kidnapped = msg.data
@@ -163,9 +179,6 @@ class PlannerHandler(Node):
             coord_key = coordinates_lookup[key]
             self.map[coord_key] = [(coordinates_lookup[conn['point']], conn['direction']) for conn in value]
 
-        for key, value in self.map.items():
-            self.get_logger().info(f"Node {key} has neighbors: {value}")
-            self.get_logger().info("\n")
 
 
 
@@ -367,7 +380,7 @@ class PlannerHandler(Node):
 
     def run(self):
         
-        if self.amcl_pose is None or self.initial_pose_flag == False or self.is_kidnapped:
+        if self.initial_pose_flag == False or self.is_kidnapped:
             return        
 
         if self.flag and (self.nav_thread is None or not self.nav_thread.is_alive()):
