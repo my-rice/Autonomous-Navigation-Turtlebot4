@@ -1,3 +1,4 @@
 policy:
   array_based: true
   n_points: 3
+  spin_dist: 45

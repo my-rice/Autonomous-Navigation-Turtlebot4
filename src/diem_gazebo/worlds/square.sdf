@@ -71,14 +71,14 @@
         <visual name='visual'>
           <geometry>
             <mesh>
-              <uri>file:///home/giovanni/Downloads/diemmap.dae</uri>
+              <uri>file:///home/giovanni/Desktop/Mobile_Robots-1/src/diem_gazebo/resource/diemmap.dae</uri>
             </mesh>
           </geometry>
         </visual>
         <collision name='collision'>
           <geometry>
             <mesh>
-              <uri>file:///home/giovanni/Downloads/diemmap.dae</uri>
+              <uri>file:///home/giovanni/Desktop/Mobile_Robots-1/src/diem_gazebo/resource/diemmap.dae</uri>
             </mesh>
           </geometry>
         </collision>
