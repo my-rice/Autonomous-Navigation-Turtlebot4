@@ -34,7 +34,7 @@ class Discovery(Node):
         self.doublesub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
         self.mutex = threading.Lock()
 
-        self.service_up = False
+        self.service_done = False
         self.client = self.create_client(ChangeState, 'lifecycle_perception/change_state')
         self.wait_for_service()
         self.req = ChangeState.Request()
@@ -79,6 +79,7 @@ class Discovery(Node):
             self.get_logger().info("Service is not ready, shutting down...")
             rclpy.shutdown()
             exit()
+        self.service_done = False
 
     def policy_straight(self, goal_x, goal_y, angle, start_x, start_y, n_points=4):
         r = math.sqrt((goal_x - start_x)**2 + (goal_y - start_y)**2)
@@ -136,7 +137,7 @@ class Discovery(Node):
         self.req.transition.id = 3
         future = self.client.call_async(self.req)
         future.add_done_callback(self.handle_service_response)
-        while not self.service_up:
+        while not self.service_done:
             self.get_logger().info("Waiting for service to be up")
             rclpy.spin_once(self, timeout_sec=1)
 
@@ -162,6 +163,9 @@ class Discovery(Node):
         self.req.transition.id = 4
         future = self.client.call_async(self.req)
         future.add_done_callback(self.handle_service_response)
+        while not self.service_done:
+            self.get_logger().info("Waiting for service to be up")
+            rclpy.spin_once(self, timeout_sec=1)
         if self.cancel_requested:
             goal_handle.abort()
             self.cancel_requested = False
@@ -187,10 +191,10 @@ class Discovery(Node):
         response = future.result()
         if response.success:
             self.get_logger().info("Operazione di servizio completata con successo")
-            self.service_up=True
+            self.service_done=True
         else:
             self.get_logger().info("Operazione di servizio fallita")
-            self.service_up=False
+            self.service_done=False
         # Qui puoi aggiungere ulteriore logica per gestire la risposta
 
     def signal_callback(self, msg):
