@@ -8,10 +8,12 @@ import yaml
 import threading
 from std_msgs.msg import String
 import math
-from geometry_msgs.msg import PoseWithCovarianceStamped
-import time
-from lifecycle_msgs.srv import ChangeState
 from rclpy.action import CancelResponse, GoalResponse
+
+import cv_bridge
+from sensor_msgs.msg import CompressedImage
+from sig_rec.qreader import QReader
+
 
 class Discovery(Node):
     def __init__(self, node_name, config_path=None, **kwargs):
@@ -26,24 +28,23 @@ class Discovery(Node):
         self.get_logger().info("Action Server 'discovery_mode' is ready")
         self.navigator = TurtleBot4Navigator()
         self.read_parameters(config_path)
-        self.founded = False
+        self.found = False
         self.signal = None
         self.amcl_pose = None
+        
+        #ROBADIADO
+        self._bridge = cv_bridge.CvBridge()
+        self._detector = QReader(model_size="n")
+        self.active = False
+        self._image_sub = self.create_subscription(CompressedImage, "/oakd/rgb/preview/image_raw/compressed", self.on_imageread, 10)
+        #ROBADIADO
 
         self.nav_thread = None
         self.cancel_requested = False
         # Create a subscription for the /tests topic
-        self.sub = self.create_subscription(String, '/output_command', self.signal_callback, 10)
         #self.doublesub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
         self.mutex = threading.Lock()
 
-        self.service_done = False
-        self.client = self.create_client(ChangeState, 'lifecycle_perception/change_state')
-        self.wait_for_service()
-        self.req = ChangeState.Request()
-        self.req.transition.id = 1 
-        future = self.client.call_async(self.req)
-        rclpy.spin_until_future_complete(self, future)
 
         self.get_logger().info("Subscribed to /output_command topic")
 
@@ -65,6 +66,7 @@ class Discovery(Node):
                 self.cancel_requested = True
 
         return CancelResponse.ACCEPT
+    
     def read_parameters(self, config_path):
         if config_path is None:
             config_path = 'src/discovery_pkg/config/config.yaml'
@@ -75,13 +77,6 @@ class Discovery(Node):
         self.policy = config['policy']['array_based']
         self.n_points = config['policy']['n_points']
         self.spin_dist = config['policy']['spin_dist']
-
-    def wait_for_service(self):
-        if (not self.client.wait_for_service(timeout_sec=10.0)):
-            self.get_logger().info("Service is not ready, shutting down...")
-            rclpy.shutdown()
-            exit()
-        self.service_done = False
 
     def policy_straight(self, goal_x, goal_y, angle, start_x, start_y, n_points=4):
         r = math.sqrt((goal_x - start_x)**2 + (goal_y - start_y)**2)
@@ -105,11 +100,11 @@ class Discovery(Node):
             self.get_logger().info(f"Point: {point}")
             for i in [-1,2,-1]:
                 try:
-                    #self.navigator.spin(spin_dist=math.radians(self.spin_dist*i))
-                    #while not self.navigator.isTaskComplete():
-                    #   rclpy.spin_once(self, timeout_sec=1)
-                    if self.founded == True:
-                        self.get_logger().info(f"Founded signal: {self.signal}")
+                    self.navigator.spin(spin_dist=math.radians(self.spin_dist*i))
+                    while not self.navigator.isTaskComplete():
+                      rclpy.spin_once(self, timeout_sec=1)
+                    if self.found == True:
+                        self.get_logger().info(f"found signal: {self.signal}")
                         break
                 except Exception as e:
                     self.get_logger().info(f"Error: {e}")
@@ -120,8 +115,8 @@ class Discovery(Node):
                 # while not self.navigator.isTaskComplete():
                 #     rclpy.spin_once(self, timeout_sec=1)
                 self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
-                if self.founded == True:
-                    self.get_logger().info(f"Founded signal: {self.signal}")
+                if self.found == True:
+                    self.get_logger().info(f"found signal: {self.signal}")
                     break
             except Exception as e:
                 self.get_logger().info(f"Error: {e}")
@@ -136,23 +131,13 @@ class Discovery(Node):
     
 
     def discovery_mode_callback(self, goal_handle):
-        self.get_logger().info("Received request")
-        self.wait_for_service()
-        self.req.transition.id = 3
-        future = self.client.call_async(self.req)
-        future.add_done_callback(self.handle_service_response)
-        while not self.service_done:
-            self.get_logger().info("Waiting for service to be up")
-            rclpy.spin_once(self, timeout_sec=1)
-
-
-        self.get_logger().info("Service is up")
+        self.active = True
         goal = goal_handle.request
         result = DiscoveryAction.Result()
 
         self.get_logger().info(f'Incoming request\n x: {goal.goal_pose_x} y: {goal.goal_pose_y} angle: {goal.angle} start_x: {goal.start_pose_x} start_y: {goal.start_pose_y}')
 
-        self.founded = False
+        self.found = False
         self.signal = None
         # self.start_navigation(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y)
        
@@ -164,13 +149,7 @@ class Discovery(Node):
         # Wait for the navigation to complete, allowing other callbacks to be processed
         self.nav_thread.join()  # Wait until the navigation thread completes
         self.nav_thread = None
-        self.wait_for_service()
-        self.req.transition.id = 4
-        future = self.client.call_async(self.req)
-        future.add_done_callback(self.handle_service_response)
-        while not self.service_done:
-            self.get_logger().info("Waiting for service to be up")
-            rclpy.spin_once(self, timeout_sec=1)
+        self.activate = False
         if self.cancel_requested:
             goal_handle.abort()
             self.cancel_requested = False
@@ -192,34 +171,46 @@ class Discovery(Node):
             goal_handle.succeed()
             return result
 
-    def handle_service_response(self, future):
-    # Questa funzione viene chiamata quando la future è completata
-        response = future.result()
-        if response.success:
-            self.get_logger().info("Operazione di servizio completata con successo")
-            self.service_done=True
-        else:
-            self.get_logger().info("Operazione di servizio fallita")
-            self.service_done=False
-        # Qui puoi aggiungere ulteriore logica per gestire la risposta
 
-    def signal_callback(self, msg):
-        self.get_logger().info(f'Received signal: {msg.data}')
-        if msg.data == "None":
-            # self.founded = True
-            # self.navigator.cancelTask()
-            pass
-        elif msg.data != "No code":
-            self.signal = msg.data  
-            self.founded = True
-            self.navigator.cancelTask()
-        else:
+    def on_imageread(self, msg):
+        if(self.active): 
+            image_msg = msg
+            cv_image = self._bridge.compressed_imgmsg_to_cv2(image_msg)
+            """
+            qrdetector = cv.QRCodeDetector()
+            ret,points,code = qrdetector.detectAndDecode(cv_image)
+            out = String()
+            out.data = ret
+            self.get_logger().info(ret)
+            self._command_pub.publish(out)
+            """
+            decoded_qrs, locations = self._detector.detect_and_decode(
+                image=cv_image, return_detections=True
+            )
+            # Print the results
+            #print(f"Image: {frame} -> {len(decoded_qrs)} QRs detected.")
+            if len(decoded_qrs) == 0:
+                out = String()
+                out.data = "NOCODE"
+                self.get_logger().info(out.data)
+                self._command_pub.publish(out)
+            else:
+                for content, location in zip(decoded_qrs, locations):
+                    #print(f"Content: {content}. Position: {tuple(location[BBOX_XYXY])}"
+                    out = String()
+                    out.data = "None" if (content is None) else content
+                    if(out.data == "None"):
+                        pass # FARE QUALCOSA
+                    elif(out.data != "NOCODE"):
+                        self.found = True
+                        self.signal = out.data
+                        self.navigator.cancelTask()
+                    self.get_logger().info(out.data)
+                    self._command_pub.publish(out)
 
-            self.get_logger().info("No code")
 
-    # def pose_callback(self, msg):
-    #     self.amcl_pose = msg
-        
+
+
 def main(args=None):
     rclpy.init(args=args)
 
