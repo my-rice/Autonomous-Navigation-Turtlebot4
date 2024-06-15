@@ -33,7 +33,7 @@ class Discovery(Node):
         self.sub = self.create_subscription(String, '/output_command', self.signal_callback, 10)
         self.doublesub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
         self.mutex = threading.Lock()
-        #PROBABILE ERRORE
+
         self.service_up = False
         self.client = self.create_client(ChangeState, 'lifecycle_perception/change_state')
         self.wait_for_service()
@@ -41,7 +41,6 @@ class Discovery(Node):
         self.req.transition.id = 1 
         future = self.client.call_async(self.req)
         rclpy.spin_until_future_complete(self, future)
-        #PROBABILE ERRORE
 
         self.get_logger().info("Subscribed to /output_command topic")
 
@@ -105,7 +104,7 @@ class Discovery(Node):
                 try:
                     self.navigator.spin(spin_dist=math.radians(self.spin_dist*i))
                     while not self.navigator.isTaskComplete():
-                        feedback = self.navigator.getFeedback()
+                        rclpy.spin_once(self, timeout_sec=1)
                     if self.founded == True:
                         self.get_logger().info(f"Founded signal: {self.signal}")
                         break
@@ -116,7 +115,7 @@ class Discovery(Node):
             try:
                 self.navigator.goToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
                 while not self.navigator.isTaskComplete():
-                    feedback = self.navigator.getFeedback()
+                    rclpy.spin_once(self, timeout_sec=1)
                 if self.founded == True:
                     self.get_logger().info(f"Founded signal: {self.signal}")
                     break
@@ -139,7 +138,8 @@ class Discovery(Node):
         future.add_done_callback(self.handle_service_response)
         while not self.service_up:
             self.get_logger().info("Waiting for service to be up")
-            time.sleep(0.1)
+            rclpy.spin_once(self, timeout_sec=1)
+
 
         goal = goal_handle.request
         result = DiscoveryAction.Result()
