@@ -114,7 +114,7 @@ class Discovery(Node):
             try:
                 # self.navigator.goToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
                 # while not self.navigator.isTaskComplete():
-                #     rclpy.spin_once(self, timeout_sec=1)
+                #     rclpy.spin_once(self, timeout_sec=1) # TODO capire qual è meglio fra startToPose e goToPose
                 self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
                 if self.found == True:
                     self.get_logger().info(f"found road_sign: {self.road_sign}")
