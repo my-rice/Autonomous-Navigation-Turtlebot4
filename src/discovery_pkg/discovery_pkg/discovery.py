@@ -94,6 +94,7 @@ class Discovery(Node):
         raise NotImplementedError
 
     def start_navigation(self, goal_x, goal_y, angle, start_x, start_y, n_points=4, spin_dist=45):
+        self.get_logger().info(f"Starting navigation to {goal_x}, {goal_y} with angle {angle} from {start_x}, {start_y}")
         # points = self.policy_arc(goal_x, goal_y, angle, start_x, start_y)
         points = self.policy_straight(goal_x, goal_y, angle, start_x, start_y, n_points)
         for point in points:
@@ -129,6 +130,7 @@ class Discovery(Node):
     
 
     def discovery_mode_callback(self, goal_handle):
+        self.get_logger().info("Discovery mode callback")
         self.active = True
         goal = goal_handle.request
         result = DiscoveryAction.Result()
@@ -145,10 +147,12 @@ class Discovery(Node):
             self.nav_thread.start()
 
         # Wait for the navigation to complete, allowing other callbacks to be processed
+        self.get_logger().info("Ready to join navigation thread")
         self.nav_thread.join()  # Wait until the navigation thread completes
         self.nav_thread = None
 
         if self.cancel_requested:
+            self.get_logger().info("Cancel requested")
             goal_handle.abort()
             self.cancel_requested = False
             result.next_action = "Canceled"
@@ -163,12 +167,15 @@ class Discovery(Node):
                     self.nav_thread.start()
                 self.nav_thread.join()  # Wait until the navigation thread completes
                 self.nav_thread = None
+                self.get_logger().info("Ready to join navigation thread 2")
+
 
             if self.cancel_requested:
                 goal_handle.abort()
                 self.cancel_requested = False
                 result.next_action = "Canceled"
                 self.active = False
+                self.get_logger().info("Canceled Goal handle:"+str(goal_handle))
                 return result
 
             else:
@@ -179,6 +186,7 @@ class Discovery(Node):
                         
                 self.get_logger().info("result next action: " + result.next_action)
                 goal_handle.succeed()
+                self.get_logger().info("Goal handle:"+str(goal_handle))
                 return result
 
 
@@ -210,7 +218,8 @@ def main(args=None):
     try:
         executor.spin()
     except KeyboardInterrupt:
-        pass
+        discovery_node.destroy_node()
+        rclpy.shutdown()
     finally:
         discovery_node.destroy_node()
         rclpy.shutdown()
