@@ -9,7 +9,7 @@ import threading
 from std_msgs.msg import String
 import math
 from rclpy.action import CancelResponse, GoalResponse
-
+import time
 import cv_bridge
 from sensor_msgs.msg import CompressedImage
 from sig_rec.qreader import QReader
@@ -29,7 +29,7 @@ class Discovery(Node):
         self.navigator = TurtleBot4Navigator()
         self.read_parameters(config_path)
         self.found = False
-        self.signal = None
+        self.road_sign = None
         self.amcl_pose = None
         
         #ROBADIADO
@@ -93,22 +93,24 @@ class Discovery(Node):
     def approach(self):
         raise NotImplementedError
 
-    def start_navigation(self, goal_x, goal_y, angle, start_x, start_y, n_points=4):
+    def start_navigation(self, goal_x, goal_y, angle, start_x, start_y, n_points=4, spin_dist=45):
+        self.get_logger().info(f"Starting navigation to {goal_x}, {goal_y} with angle {angle} from {start_x}, {start_y}")
         # points = self.policy_arc(goal_x, goal_y, angle, start_x, start_y)
         points = self.policy_straight(goal_x, goal_y, angle, start_x, start_y, n_points)
         for point in points:
             self.get_logger().info(f"Point: {point}")
             for i in [-1,2,-1]:
                 try:
-                    self.navigator.spin(spin_dist=math.radians(self.spin_dist*i))
+                    self.navigator.spin(spin_dist=math.radians(spin_dist*i))
                     while not self.navigator.isTaskComplete():
                       rclpy.spin_once(self, timeout_sec=1)
+                    time.sleep(0.5)
                     if self.found == True:
-                        self.get_logger().info(f"found signal: {self.signal}")
+                        self.get_logger().info(f"found road_sign: {self.road_sign}")
                         break
                 except Exception as e:
                     self.get_logger().info(f"Error: {e}")
-                    # self.signal = "Error"
+                    self.road_sign = "Error"
                     break
             try:
                 # self.navigator.goToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
@@ -116,21 +118,19 @@ class Discovery(Node):
                 #     rclpy.spin_once(self, timeout_sec=1) # TODO capire qual è meglio fra startToPose e goToPose
                 self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
                 if self.found == True:
-                    self.get_logger().info(f"found signal: {self.signal}")
+                    self.get_logger().info(f"found road_sign: {self.road_sign}")
                     break
             except Exception as e:
                 self.get_logger().info(f"Error: {e}")
-                # self.signal = "Error"
+                self.road_sign = "Error"
                 break
-
-        # if(self.signal is None):
-        #     #approach
-        #     approach = self.approach()
+            
         self.get_logger().info("Navigation completed successfully")
 
     
 
     def discovery_mode_callback(self, goal_handle):
+        self.get_logger().info("Discovery mode callback")
         self.active = True
         goal = goal_handle.request
         result = DiscoveryAction.Result()
@@ -138,75 +138,72 @@ class Discovery(Node):
         self.get_logger().info(f'Incoming request\n x: {goal.goal_pose_x} y: {goal.goal_pose_y} angle: {goal.angle} start_x: {goal.start_pose_x} start_y: {goal.start_pose_y}')
 
         self.found = False
-        self.signal = None
+        self.road_sign = None
         # self.start_navigation(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y)
        
         # Start the navigation in a separate thread
         with self.mutex:
-            self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y, self.n_points))
+            self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y, self.n_points, self.spin_dist))
             self.nav_thread.start()
 
         # Wait for the navigation to complete, allowing other callbacks to be processed
+        self.get_logger().info("Ready to join navigation thread")
         self.nav_thread.join()  # Wait until the navigation thread completes
         self.nav_thread = None
-        self.activate = False
+
         if self.cancel_requested:
+            self.get_logger().info("Cancel requested")
             goal_handle.abort()
             self.cancel_requested = False
             result.next_action = "Canceled"
+            self.active = False
             return result
         else:
-            # if(self.signal=='None'):
-            #     result.next_action = "None"
-            # elif(self.signal is not None):
-            #     result.next_action = self.signal
-            # else:
-            #     result.next_action = "Error"
-            if(self.signal is None):
-                result.next_action = "right" # TODO Da fare random
+            if(self.road_sign is None):
+                with self.mutex:
+                    increment_x = (goal.goal_pose_x - goal.start_pose_x)
+                    increment_y = (goal.goal_pose_y - goal.start_pose_y) 
+                    self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.start_pose_x-increment_x/3, goal.start_pose_y-increment_y/3, goal.angle, goal.goal_pose_x, goal.goal_pose_y, self.n_points+2, self.spin_dist+20))
+                    self.nav_thread.start()
+                self.nav_thread.join()  # Wait until the navigation thread completes
+                self.nav_thread = None
+                self.get_logger().info("Ready to join navigation thread 2")
+
+
+            if self.cancel_requested:
+                goal_handle.abort()
+                self.cancel_requested = False
+                result.next_action = "Canceled"
+                self.active = False
+                self.get_logger().info("Canceled Goal handle:"+str(goal_handle))
+                return result
+
             else:
-                result.next_action = (str(self.signal)).lower()
-                    
-            self.get_logger().info("result next action: " + result.next_action)
-            goal_handle.succeed()
-            return result
+                if(self.road_sign is None):
+                    result.next_action = "random" 
+                else:
+                    result.next_action = (str(self.road_sign)).lower()
+                        
+                self.get_logger().info("result next action: " + result.next_action)
+                goal_handle.succeed()
+                self.get_logger().info("Goal handle:"+str(goal_handle))
+                return result
 
 
     def on_imageread(self, msg):
         if(self.active): 
             image_msg = msg
             cv_image = self._bridge.compressed_imgmsg_to_cv2(image_msg)
-            """
-            qrdetector = cv.QRCodeDetector()
-            ret,points,code = qrdetector.detectAndDecode(cv_image)
-            out = String()
-            out.data = ret
-            self.get_logger().info(ret)
-            self._command_pub.publish(out)
-            """
             decoded_qrs, locations = self._detector.detect_and_decode(
                 image=cv_image, return_detections=True
             )
-            # Print the results
-            #print(f"Image: {frame} -> {len(decoded_qrs)} QRs detected.")
-            if len(decoded_qrs) == 0:
-                out = String()
-                out.data = "NOCODE"
-                self.get_logger().info(out.data)
-                self._command_pub.publish(out)
-            else:
+            if len(decoded_qrs) != 0:
                 for content, location in zip(decoded_qrs, locations):
-                    #print(f"Content: {content}. Position: {tuple(location[BBOX_XYXY])}"
-                    out = String()
-                    out.data = "None" if (content is None) else content
-                    if(out.data == "None"):
-                        pass # FARE QUALCOSA
-                    elif(out.data != "NOCODE"):
+                    if(content != None):
                         self.found = True
-                        self.signal = out.data
+                        self.road_sign = content
                         self.navigator.cancelTask()
-                    self.get_logger().info(out.data)
-                    self._command_pub.publish(out)
+                        self.get_logger().info(content)
 
 
 
@@ -221,7 +218,8 @@ def main(args=None):
     try:
         executor.spin()
     except KeyboardInterrupt:
-        pass
+        discovery_node.destroy_node()
+        rclpy.shutdown()
     finally:
         discovery_node.destroy_node()
         rclpy.shutdown()

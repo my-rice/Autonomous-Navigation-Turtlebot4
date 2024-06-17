@@ -132,11 +132,14 @@ class PlannerHandler(Node):
 
         self.build_p_map()
         # Wait for Nav2.
-
+        self.navigator.waitUntilNav2Active()
+        self.get_logger().info("Nav2 is active")
+        
         while self.initial_pose_flag == False:
+            self.get_logger().info("Waiting for the initial pose")
             rclpy.spin_once(self, timeout_sec=1)
 
-        self.navigator.waitUntilNav2Active()
+        
 
         if(self.discovery_action_client.wait_for_server(self.timeout)):
             self.get_logger().info("Action server is ready")
