@@ -178,17 +178,20 @@ class PlannerHandler(Node):
             self.get_logger().info('Initial pose received: {0} {1} {2}'.format(msg.pose.pose.position.x, msg.pose.pose.position.y, angle))
 
     def kidnapped_callback(self, msg):
-        self.is_kidnapped = msg.data
+        
         self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
 
-        if self.is_kidnapped == True and self.last_kidnapped == False:
+        if msg.data == True and self.last_kidnapped == False:
             # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
-            self.get_logger().info("The robot is in kidnapped mode")
+            self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
+            self.is_kidnapped = msg.data
             self.abort() # abort the current goal
 
-        if self.is_kidnapped == False and self.last_kidnapped == True:
+        if msg.data == False and self.last_kidnapped == True:
             self.get_logger().info("The robot is deployed")
             self.relocate()     
+            self.is_kidnapped = msg.data # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
+        
         self.last_kidnapped = self.is_kidnapped
 
 
@@ -230,7 +233,7 @@ class PlannerHandler(Node):
         # convert frame angle to standard frame (remove the offset)
         next_goal_angle = next_goal_angle + 90 # TODO: change this to directions N, E, S, W. So, this conversion is not needed anymore 
 
-        self.get_logger().info("The standard angle is: " + str(next_goal_angle))
+        #self.get_logger().info("The standard angle is: " + str(next_goal_angle))
 
         next_goal_angle = self.compute_next_angle(next_goal_angle, result)
 
@@ -242,9 +245,9 @@ class PlannerHandler(Node):
             next_goal_angle = "left"
         elif next_goal_angle < 315:
             next_goal_angle = "down"
-        self.get_logger().info("Current goal pose: " + str(current_goal_pose))
+        #self.get_logger().info("Current goal pose: " + str(current_goal_pose))
     
-        self.get_logger().info("The next goal angle is: " + str(next_goal_angle))
+        #self.get_logger().info("The next goal angle is: " + str(next_goal_angle))
 
 
         neighbors = self.map[current_goal_pose]
@@ -305,7 +308,7 @@ class PlannerHandler(Node):
         result = get_result_future.result().result.next_action
         return result
         
-    def get_intersection_points(self, next_goal, theta, result="straighton",rho=1):
+    def get_intersection_points(self, next_goal, theta, result="straighton",rho=3):
         x1,y1 = next_goal
         xc, yc = next_goal
 
@@ -328,10 +331,10 @@ class PlannerHandler(Node):
             intersection_points = [(x_intersect1, y_intersect1), (x_intersect2, y_intersect2)]
             return intersection_points, angle
 
-        self.get_logger().info(f"Standard angle: {standard_angle}")
+        #self.get_logger().info(f"Standard angle: {standard_angle}")
         m = math.tan(math.radians(standard_angle))
         q = y1 - m * x1
-        self.get_logger().info(f"m: {m}, q: {q}")
+        #self.get_logger().info(f"m: {m}, q: {q}")
 
         # Coefficienti dell'equazione quadratica
         A = 1 + m**2
@@ -353,7 +356,7 @@ class PlannerHandler(Node):
 
         # Riportare i punti nel sistema originale (x verso l'alto, y verso sinistra)
         intersection_points = [(x_intersect1,y_intersect1), (x_intersect2, y_intersect2)]
-        self.get_logger().info(f"Intersection points: {intersection_points} and angle: {angle}")
+        #self.get_logger().info(f"Intersection points: {intersection_points} and angle: {angle}")
         return intersection_points, angle
 
     def start_navigation(self, x, y, angle=0):
@@ -372,13 +375,13 @@ class PlannerHandler(Node):
         ### Get the ideal relocation pose of the robot
 
 
-
+        self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
         points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], "straighton", rho=4)
         points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
-        self.ideal_relocation = points[0]
-        self.action_payload = (points[1][0],points[1][1],angle)
-        self.navigator.setInitialPose(self.navigator.getPoseStamped(self.ideal_relocation, angle))
-        self.get_logger().info("The ideal relocation is: " + str(self.ideal_relocation))
+        ideal_relocation = points[0]
+        self.action_payload = (points[1][0],points[1][1],angle) # the action payload is the last point of the crossing where the robot has to search for the traffic sign
+        self.navigator.setInitialPose(self.navigator.getPoseStamped(ideal_relocation, angle))
+        self.get_logger().info("The ideal relocation is: " + str(ideal_relocation))
         self.next_goal = self.last_goal
         self.nav_goal = self.last_nav_goal
         
@@ -425,18 +428,21 @@ class PlannerHandler(Node):
             
 
 
-        # TODO: le altre due condizioni sono inutili così: FARE REFACTORING
+        
         if self.flag and (self.nav_thread is None or not self.nav_thread.is_alive()): # If the robot has reached the goal, or it is the first time the robot is deployed or the robot is not running any navigation task, look for the next sign road, compute the next goal and start the navigation towards the next goal
             self.flag = False #TODO change the name of the flag, it is not clear!!! 
                               # The flag is used to avoid entering in the if statement multiple times.
             # get the current pose of the robot
-            x = self.amcl_pose.pose.pose.position.x
-            y = self.amcl_pose.pose.pose.position.y
-            theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
             # Transition to discovery mode
             
             if self.first_discovery == True:
+                x = self.amcl_pose.pose.pose.position.x
+                y = self.amcl_pose.pose.pose.position.y
+                theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
+                pose = (x, y, theta)
+
                 self.nav_goal = (x, y, theta) # TODO: if I am out of the circle, then I need to go to the circonference, so I need to update the nav_goal
+                self.get_logger().info("The first discovery: " + str(self.nav_goal))
                 self.last_nav_goal = (x, y, theta)
                 # Find the next goal
                 min_distance = float("inf")
@@ -452,14 +458,9 @@ class PlannerHandler(Node):
             else:
                 
                 # compute the navigation goal: which is a particular point on the way to the next goal where the robot has to search for the road sign
-                intersection_points, angle = self.get_intersection_points(self.next_goal, theta, self.result)
-                points = self.order_by_distance(intersection_points, x, y)
-                self.nav_goal = (points[0][0], points[0][1], angle)
-                self.action_payload = (points[1][0],points[1][1],angle)
-                
                 self.get_logger().info("THe nav goal is: " + str(self.nav_goal))
                 self.get_logger().info("THe action payload is: " + str(self.action_payload))
-                self.get_logger().info(f"***\n NEXT GOAL: {self.next_goal} \n***")
+                self.get_logger().info(f"\n***********\nNEXT GOAL: {self.next_goal}\n***********")
             
                 # Start the navigation in a separate thread
                 x, y ,angle= map(float, self.nav_goal)
@@ -490,6 +491,20 @@ class PlannerHandler(Node):
 
             # compute the next goal based on the result
             self.next_goal = self.action_result2goal(self.result, (x, y, theta), self.next_goal)
+
+            # computing the next navigation goal
+            x = self.amcl_pose.pose.pose.position.x
+            y = self.amcl_pose.pose.pose.position.y
+            theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
+            pose = (x, y, theta)
+
+            intersection_points, angle = self.get_intersection_points(self.next_goal, theta, self.result)
+            points = self.order_by_distance(intersection_points, x, y)
+            self.nav_goal = (points[0][0], points[0][1], angle)
+            self.action_payload = (points[1][0],points[1][1],angle)
+                
+
+
             self.flag = True
             self.discovery_flag = False
 

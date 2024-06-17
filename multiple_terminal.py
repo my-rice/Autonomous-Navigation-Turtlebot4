@@ -19,4 +19,4 @@ for i,cmd in enumerate(commands):
     if i==0:
         time.sleep(3)
     else:
-        time.sleep(2)
+        time.sleep(1)
