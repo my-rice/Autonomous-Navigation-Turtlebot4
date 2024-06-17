@@ -148,6 +148,8 @@ class Discovery(Node):
 
         # Wait for the navigation to complete, allowing other callbacks to be processed
         self.get_logger().info("Ready to join navigation thread")
+        while self.nav_thread.is_alive():
+            rclpy.spin_once(self, timeout_sec=1)
         self.nav_thread.join()  # Wait until the navigation thread completes
         self.nav_thread = None
 
@@ -165,6 +167,8 @@ class Discovery(Node):
                     increment_y = (goal.goal_pose_y - goal.start_pose_y) 
                     self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.start_pose_x-increment_x/3, goal.start_pose_y-increment_y/3, goal.angle, goal.goal_pose_x, goal.goal_pose_y, self.n_points+2, self.spin_dist+20))
                     self.nav_thread.start()
+                while self.nav_thread.is_alive():
+                    rclpy.spin_once(self, timeout_sec=1)
                 self.nav_thread.join()  # Wait until the navigation thread completes
                 self.nav_thread = None
                 self.get_logger().info("Ready to join navigation thread 2")
