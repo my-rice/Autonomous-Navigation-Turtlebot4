@@ -127,19 +127,20 @@ class PlannerHandler(Node):
         self.flag = True
         self.last_goal = None
         self.last_nav_goal = None
-
+        self.next_goal = None
+        self.nav_goal = None
+        self.result = None
         self.last_kidnapped = False
+        self.discovery_flag = False
 
         self.build_p_map()
         # Wait for Nav2.
-        self.navigator.waitUntilNav2Active()
-        self.get_logger().info("Nav2 is active")
-        
+
         while self.initial_pose_flag == False:
-            self.get_logger().info("Waiting for the initial pose")
+            self.get_logger().info("Set the initial pose")
             rclpy.spin_once(self, timeout_sec=1)
 
-        
+        self.navigator.waitUntilNav2Active()
 
         if(self.discovery_action_client.wait_for_server(self.timeout)):
             self.get_logger().info("Action server is ready")
@@ -290,7 +291,7 @@ class PlannerHandler(Node):
 
         while not future_goal.done():
             self.get_logger().info("Waiting for the result")
-            rclpy.spin_once(self.discovery_action_client, timeout_sec=1)
+            rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
 
         self.get_logger().info("spin 2")
         goal_handle = future_goal.result()
@@ -299,7 +300,7 @@ class PlannerHandler(Node):
         
         while not get_result_future.done():
             self.get_logger().info("Waiting for the result 2")
-            rclpy.spin_once(self.discovery_action_client, timeout_sec=1)
+            rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
 
         result = get_result_future.result().result.next_action
         return result
@@ -375,7 +376,7 @@ class PlannerHandler(Node):
         points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], "straighton", rho=4)
         points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
         self.ideal_relocation = points[0]
-    
+        self.action_payload = (points[1][0],points[1][1],angle)
         self.navigator.setInitialPose(self.navigator.getPoseStamped(self.ideal_relocation, angle))
         self.get_logger().info("The ideal relocation is: " + str(self.ideal_relocation))
         self.next_goal = self.last_goal
@@ -396,11 +397,13 @@ class PlannerHandler(Node):
     def abort(self):
         # Cancel the current goal
         self.get_logger().info("Aborting the current goal")
+        self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
         if self.nav_thread is not None:
             self.navigator.cancelTask()
             self.nav_thread.join()
             self.nav_thread = None
             self.flag = True
+            self.discovery_flag = False
         self.discovery_action_client.cancel_goal()
 
 
@@ -413,6 +416,16 @@ class PlannerHandler(Node):
         if self.initial_pose_flag == False or self.is_kidnapped:
             return        
 
+        if self.nav_thread is not None and not self.nav_thread.is_alive():
+            # if the robot has reached the goal, then we need to join the navigation thread and set the flag to True, so that the robot can compute the next goal
+            self.nav_thread.join()
+            self.nav_thread = None
+            self.discovery_flag = True
+            
+            
+
+
+        # TODO: le altre due condizioni sono inutili così: FARE REFACTORING
         if self.flag and (self.nav_thread is None or not self.nav_thread.is_alive()): # If the robot has reached the goal, or it is the first time the robot is deployed or the robot is not running any navigation task, look for the next sign road, compute the next goal and start the navigation towards the next goal
             self.flag = False #TODO change the name of the flag, it is not clear!!! 
                               # The flag is used to avoid entering in the if statement multiple times.
@@ -420,12 +433,11 @@ class PlannerHandler(Node):
             x = self.amcl_pose.pose.pose.position.x
             y = self.amcl_pose.pose.pose.position.y
             theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
-
             # Transition to discovery mode
             
             if self.first_discovery == True:
+                self.nav_goal = (x, y, theta) # TODO: if I am out of the circle, then I need to go to the circonference, so I need to update the nav_goal
                 self.last_nav_goal = (x, y, theta)
-
                 # Find the next goal
                 min_distance = float("inf")
                 for goal in self.map:
@@ -434,46 +446,55 @@ class PlannerHandler(Node):
                         min_distance = distance
                         self.next_goal = goal
                         self.last_goal = goal
-            else:
-                self.last_nav_goal = self.nav_goal
                 
-            result = self.discovery_mode((x, y, theta))
-
-
-            self.get_logger().info("RESULT: " + str(result))
+                #TODO: se la posa iniziale è troppo lontana dal goal iniziale, allora bisogna avvicinarsi e poi fare la discovery
+                self.discovery_flag = True
+            else:
+                
+                # compute the navigation goal: which is a particular point on the way to the next goal where the robot has to search for the road sign
+                intersection_points, angle = self.get_intersection_points(self.next_goal, theta, self.result)
+                points = self.order_by_distance(intersection_points, x, y)
+                self.nav_goal = (points[0][0], points[0][1], angle)
+                self.action_payload = (points[1][0],points[1][1],angle)
+                
+                self.get_logger().info("THe nav goal is: " + str(self.nav_goal))
+                self.get_logger().info("THe action payload is: " + str(self.action_payload))
+                self.get_logger().info(f"***\n NEXT GOAL: {self.next_goal} \n***")
             
-            # if the result is stop, then it means that the robot has reached the final goal
-            if result == "stop":
-                self.get_logger().info("The robot has stopped")
-                self.abort()
-
-                raise ExitException("The robot has reached the final goal")
+                # Start the navigation in a separate thread
+                x, y ,angle= map(float, self.nav_goal)
+                self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y, angle))
+                self.nav_thread.start()
+            
+        if self.discovery_flag == True:
+            self.get_logger().info("self.discovery_flag == True")
+            x = self.amcl_pose.pose.pose.position.x
+            y = self.amcl_pose.pose.pose.position.y
+            theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
+            pose = (x, y, theta)
 
             self.last_goal = self.next_goal # save the last goal
-            # compute the next goal based on the result
-            self.next_goal = self.action_result2goal(result, (x, y, theta), self.next_goal)
-            
-            # compute the navigation goal: which is a particular point on the way to the next goal where the robot has to search for the road sign
-            intersection_points, angle = self.get_intersection_points(self.next_goal, theta, result)
-            points = self.order_by_distance(intersection_points, x, y)
-            self.nav_goal = (points[0][0], points[0][1], angle)
-            self.action_payload = (points[1][0],points[1][1],angle)
-            
-            self.get_logger().info("THe nav goal is: " + str(self.nav_goal))
-            self.get_logger().info("THe action payload is: " + str(self.action_payload))
+            self.last_nav_goal = self.nav_goal # save the last navigation goal
 
-            self.get_logger().info(f"***\n NEXT GOAL: {self.next_goal} \n***")
-        
-            # Start the navigation in a separate thread
-            x, y ,angle= map(float, self.nav_goal)
-            self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y, angle))
-            self.nav_thread.start()
-        
-        if not self.nav_thread.is_alive():
-            # if the robot has reached the goal, then we need to join the navigation thread and set the flag to True, so that the robot can compute the next goal
+            self.result = self.discovery_mode(pose)
+
+
+            self.get_logger().info("RESULT: " + str(self.result))
+            
+            # if the result is stop, then it means that the robot has reached the final goal
+            if self.result == "stop":
+                self.get_logger().info("The robot has stopped")
+                self.abort()
+                #TODO: VALUTARE SE DEVO FARE QUALCOSA DOPO L'ABORT
+                raise ExitException("The robot has reached the final goal")
+
+            # compute the next goal based on the result
+            self.next_goal = self.action_result2goal(self.result, (x, y, theta), self.next_goal)
             self.flag = True
-            self.nav_thread.join()
-            self.nav_thread = None
+            self.discovery_flag = False
+
+            
+            
 
 
 
