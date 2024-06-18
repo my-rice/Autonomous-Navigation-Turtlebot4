@@ -230,24 +230,17 @@ class PlannerHandler(Node):
         next_goal_angle = initial_pose[2]
         self.get_logger().info("The initial pose is: " + str(initial_pose))
         self.get_logger().info("THe result is: " + result)
-        # convert frame angle to standard frame (remove the offset)
-        next_goal_angle = next_goal_angle + 90 # TODO: change this to directions N, E, S, W. So, this conversion is not needed anymore 
-
-        #self.get_logger().info("The standard angle is: " + str(next_goal_angle))
 
         next_goal_angle = self.compute_next_angle(next_goal_angle, result)
 
-        if next_goal_angle < 45 or next_goal_angle >= 315: # TODO: change this to directions N, E, S, W
-            next_goal_angle = "right"
+        if next_goal_angle < 45 or next_goal_angle >= 315: 
+            next_goal_angle = "north"
         elif next_goal_angle < 135:
-            next_goal_angle = "up"
+            next_goal_angle = "west"
         elif next_goal_angle < 225:
-            next_goal_angle = "left"
+            next_goal_angle = "south"
         elif next_goal_angle < 315:
-            next_goal_angle = "down"
-        #self.get_logger().info("Current goal pose: " + str(current_goal_pose))
-    
-        #self.get_logger().info("The next goal angle is: " + str(next_goal_angle))
+            next_goal_angle = "east"
 
 
         neighbors = self.map[current_goal_pose]
@@ -280,7 +273,7 @@ class PlannerHandler(Node):
         
         if(self.first_discovery == True):
             self.get_logger().info("The first discovery")
-            discovery_goal_intersects, angle = self.get_intersection_points(self.next_goal, theta, "straighton")
+            discovery_goal_intersects, angle = self.get_intersection_points(self.next_goal, theta)
             points = self.order_by_distance(discovery_goal_intersects, x, y)
             self.action_payload = (points[1][0],points[1][1],angle)
             self.first_discovery = False
@@ -308,31 +301,26 @@ class PlannerHandler(Node):
         result = get_result_future.result().result.next_action
         return result
         
-    def get_intersection_points(self, next_goal, theta, result="straighton",rho=3):
+    def get_intersection_points(self, next_goal, approach_angle, rho=3):
         x1,y1 = next_goal
         xc, yc = next_goal
 
-        # Convert frame angle to standard frame (remove the offset)
-        standard_angle = theta #+ 90
-        standard_angle = self.compute_next_angle(standard_angle, result)
+        
+        if approach_angle < 0:
+            approach_angle += 360
+        if approach_angle >= 360:
+            approach_angle -= 360
 
-        # Portiamo l'angolo tra 0 e 360 gradi
-        angle = standard_angle #- 90
-        if angle < 0:
-            angle += 360
-        if angle >= 360:
-            angle -= 360
-
-        if standard_angle == 90:
+        if approach_angle == 90:
             x_intersect1 = xc
             y_intersect1 = yc + rho
             x_intersect2 = xc
             y_intersect2 = yc - rho
             intersection_points = [(x_intersect1, y_intersect1), (x_intersect2, y_intersect2)]
-            return intersection_points, angle
+            return intersection_points, approach_angle
 
         #self.get_logger().info(f"Standard angle: {standard_angle}")
-        m = math.tan(math.radians(standard_angle))
+        m = math.tan(math.radians(approach_angle))
         q = y1 - m * x1
         #self.get_logger().info(f"m: {m}, q: {q}")
 
@@ -357,7 +345,7 @@ class PlannerHandler(Node):
         # Riportare i punti nel sistema originale (x verso l'alto, y verso sinistra)
         intersection_points = [(x_intersect1,y_intersect1), (x_intersect2, y_intersect2)]
         #self.get_logger().info(f"Intersection points: {intersection_points} and angle: {angle}")
-        return intersection_points, angle
+        return intersection_points, approach_angle
 
     def start_navigation(self, x, y, angle=0):
         self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
@@ -367,8 +355,8 @@ class PlannerHandler(Node):
         euler = q.yaw_pitch_roll
         yaw = euler[0]
         # convert the yaw angle to degrees
-        theta = yaw * 180 / 3.14159265359
-        return theta
+        approach_angle = yaw * 180 / 3.14159265359
+        return approach_angle
 
     def relocate(self):
         self.get_logger().info("Relocating the robot")
@@ -376,7 +364,7 @@ class PlannerHandler(Node):
 
 
         self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
-        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], "straighton", rho=4)
+        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], rho=4)
         points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
         ideal_relocation = points[0]
         self.action_payload = (points[1][0],points[1][1],angle) # the action payload is the last point of the crossing where the robot has to search for the traffic sign
@@ -497,10 +485,21 @@ class PlannerHandler(Node):
             # computing the next navigation goal
             x = self.amcl_pose.pose.pose.position.x
             y = self.amcl_pose.pose.pose.position.y
-            theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
+            
+            # compute the angolar coefficient of the line that connects the next goal to the last goal. This will be the approach angle to the next goal
+            if self.last_goal != self.next_goal:
+                theta = math.atan2(self.next_goal[1] - self.last_goal[1], self.next_goal[0] - self.last_goal[0]) * 180 / math.pi
+            else:
+                theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
+                theta += self.compute_next_angle(self.result)
+                if theta >= 360:
+                    theta -= 360
+                
+            if theta < 0:
+                theta += 360
             pose = (x, y, theta)
 
-            intersection_points, angle = self.get_intersection_points(self.next_goal, theta, self.result)
+            intersection_points, angle = self.get_intersection_points(self.next_goal, theta)
             points = self.order_by_distance(intersection_points, x, y)
             self.nav_goal = (points[0][0], points[0][1], angle)
             self.action_payload = (points[1][0],points[1][1],angle)

@@ -36,66 +36,66 @@ map:
   connections:
     A:
       - point: B
-        direction: right
+        direction: east
       - point: C
-        direction: down
+        direction: south
     B:
       - point: A
-        direction: left
+        direction: west
       - point: D
-        direction: down
+        direction: south
     C:
       - point: A
-        direction: up
+        direction: north
       - point: D
-        direction: right
+        direction: east
       - point: E
-        direction: down
+        direction: south
     D:
       - point: B
-        direction: up
+        direction: north
       - point: C
-        direction: left
+        direction: west
       - point: F
-        direction: down
+        direction: south
     E:
       - point: C
-        direction: up
+        direction: north
       - point: F
-        direction: right
+        direction: east
       - point: G
-        direction: down
+        direction: south
     F:
       - point: D
-        direction: up
+        direction: north
       - point: E
-        direction: left
+        direction: west
       - point: H
-        direction: down
+        direction: south
     G:
       - point: E
-        direction: up
+        direction: north
       - point: H
-        direction: right
+        direction: east
       - point: I
-        direction: down
+        direction: south
     H:
       - point: F
-        direction: up
+        direction: north
       - point: G
-        direction: left
+        direction: west
       - point: J
-        direction: down
+        direction: south
     I:
       - point: G
-        direction: up
+        direction: north
       - point: J
-        direction: right
+        direction: east
     J:
       - point: H
-        direction: up
+        direction: north
       - point: I
-        direction: left
+        direction: west
 planner_parameters:
   timer_period: 0.1
   timeout: 10.0
