@@ -347,8 +347,8 @@ class PlannerHandler(Node):
         #self.get_logger().info(f"Intersection points: {intersection_points} and angle: {angle}")
         return intersection_points, approach_angle
 
-    def start_navigation(self, x, y, angle=0):
-        self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
+    # def start_navigation(self, x, y, angle=0):
+    #     self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
 
     def get_angle(self, quaternion):
         q = Quaternion(quaternion.w, quaternion.x, quaternion.y, quaternion.z)
@@ -408,15 +408,8 @@ class PlannerHandler(Node):
         
         if self.initial_pose_flag == False or self.is_kidnapped:
             return        
-
-        if self.nav_thread is not None and not self.nav_thread.is_alive():
-            # if the robot has reached the goal, then we need to join the navigation thread and set the flag to True, so that the robot can compute the next goal
-            self.nav_thread.join()
-            self.nav_thread = None
-            self.discovery_flag = True
-                
-        
-        if self.flag and (self.nav_thread is None or not self.nav_thread.is_alive()): # If the robot has reached the goal, or it is the first time the robot is deployed or the robot is not running any navigation task, look for the next sign road, compute the next goal and start the navigation towards the next goal
+                        
+        if self.flag: 
             self.flag = False #TODO change the name of the flag, it is not clear!!! 
                               # The flag is used to avoid entering in the if statement multiple times.
             # get the current pose of the robot
@@ -451,8 +444,13 @@ class PlannerHandler(Node):
             
                 # Start the navigation in a separate thread
                 x, y ,angle= map(float, self.nav_goal)
-                self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y, angle))
-                self.nav_thread.start()
+                
+                #self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y, angle))
+                self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
+                #self.nav_thread.start()
+                #self.nav_thread.join()
+                #self.nav_thread = None
+                self.discovery_flag = True
             
         if self.discovery_flag == True:
             self.get_logger().info("self.discovery_flag == True")
