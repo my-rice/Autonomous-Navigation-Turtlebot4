@@ -70,6 +70,12 @@ class Discovery(Node):
                 self.get_logger().info('Cancelling navigation thread')
                 self.navigator.cancelTask()
                 self.cancel_requested = True
+                self.road_sign = "Canceled"
+                self.found = True
+                # cancel the nav thread
+            
+                self.nav_thread
+
         return CancelResponse.ACCEPT
 
     def read_parameters(self, config_path):

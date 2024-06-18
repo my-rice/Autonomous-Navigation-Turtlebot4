@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             "no_localization = exercise_navigation.no_localization:main",
             "localization = exercise_navigation.localization:main",
+            "trash = exercise_navigation.trash:main",
         ],
     },
 )
