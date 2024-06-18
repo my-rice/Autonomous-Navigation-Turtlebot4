@@ -347,9 +347,6 @@ class PlannerHandler(Node):
         #self.get_logger().info(f"Intersection points: {intersection_points} and angle: {angle}")
         return intersection_points, approach_angle
 
-    # def start_navigation(self, x, y, angle=0):
-    #     self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
-
     def get_angle(self, quaternion):
         q = Quaternion(quaternion.w, quaternion.x, quaternion.y, quaternion.z)
         euler = q.yaw_pitch_roll
@@ -374,34 +371,15 @@ class PlannerHandler(Node):
         self.nav_goal = self.last_nav_goal
         
 
-    # def kidnapped_mode(self):
-        # self.relocate() # TODO: change the name of the function
-        # while self.is_kidnapped:
-        #     self.get_logger().info("The robot is still kidnapped")
-        #     time.sleep(0.5)
-        
-        # self.get_logger().info("The robot is no longer kidnapped")
-        # self.flag = True
-        # if the robot has been kidnapped, then we need to recompute the current location
-
-
     def abort(self):
         # Cancel the current goal
         self.get_logger().info("Aborting the current goal")
         self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
         self.timer.cancel()
-        if self.nav_thread is not None:
-            self.navigator.cancelTask()
-            self.get_logger().info("canceling the ")
-            self.nav_thread.join()
-            self.nav_thread = None
-            self.flag = True
-            self.discovery_flag = False
+        self.navigator.cancelTask()
+        self.flag = True
+        self.discovery_flag = False
         self.discovery_action_client.cancel_goal()
-
-
-        
-
 
 
     def run(self):
@@ -435,8 +413,7 @@ class PlannerHandler(Node):
                 
                 #TODO: se la posa iniziale è troppo lontana dal goal iniziale, allora bisogna avvicinarsi e poi fare la discovery
                 self.discovery_flag = True
-            else:
-                
+            else:    
                 # compute the navigation goal: which is a particular point on the way to the next goal where the robot has to search for the road sign
                 self.get_logger().info("THe nav goal is: " + str(self.nav_goal))
                 self.get_logger().info("THe action payload is: " + str(self.action_payload))
@@ -445,11 +422,7 @@ class PlannerHandler(Node):
                 # Start the navigation in a separate thread
                 x, y ,angle= map(float, self.nav_goal)
                 
-                #self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y, angle))
                 self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
-                #self.nav_thread.start()
-                #self.nav_thread.join()
-                #self.nav_thread = None
                 self.discovery_flag = True
             
         if self.discovery_flag == True:
@@ -504,13 +477,6 @@ class PlannerHandler(Node):
 
             self.flag = True
             self.discovery_flag = False
-
-            
-            
-
-
-
-
 
 
 def main(args=None):
