@@ -16,6 +16,8 @@ import threading
 import time
 import math
 from pyquaternion import Quaternion
+from visualization_msgs.msg import Marker
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 
@@ -101,12 +103,17 @@ class PlannerHandler(Node):
         self.parallel_group = ReentrantCallbackGroup()
         self.kidnap_group = ReentrantCallbackGroup()
         self.sub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10, callback_group=self.parallel_group)
-        
-        # self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, 10)
+        qos_reliable = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+            reliability=ReliabilityPolicy.BEST_EFFORT
+        )
+        self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
         
         # TOPIC FOR TESTING PURPOSES: to test the recovery mode, we need to kidnap the robot
-        self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_callback, 10, callback_group=self.kidnap_group)
-        
+        #self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_callback, 10, callback_group=self.kidnap_group)
+        self.publisher_ = self.create_publisher(Marker, 'visualization_marker', 10)
+
 
         self.subscription = self.create_subscription(PoseWithCovarianceStamped,'/initialpose',self.listener_callback,10, callback_group=self.parallel_group)
 
@@ -164,7 +171,7 @@ class PlannerHandler(Node):
         # if(not self.initial_pose_flag):
         #     self.initial_pose_flag = True
         self.amcl_pose = msg
-        self.get_logger().info(f"Pose callback: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
+        # self.get_logger().info(f"Pose callback: {msg.pose.pose.position.x}, {msg.pose.pose.position.y}")
         
    
     def listener_callback(self, msg):
@@ -179,20 +186,21 @@ class PlannerHandler(Node):
     def kidnapped_callback(self, msg):
         
         self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
+        if(self.initial_pose_flag):
+            if msg.is_kidnapped == True and self.last_kidnapped == False:
+                # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
+                self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
+                self.is_kidnapped = msg.is_kidnapped
+                self.abort() # abort the current goal
+                self.plot_point_on_rviz()
 
-        if msg.data == True and self.last_kidnapped == False:
-            # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
-            self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
-            self.is_kidnapped = msg.data
-            self.abort() # abort the current goal
-
-        if msg.data == False and self.last_kidnapped == True:
-            self.get_logger().info("The robot is deployed")
-            self.relocate()     
-            self.is_kidnapped = msg.data # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
-            self.timer.reset()
-        
-        self.last_kidnapped = self.is_kidnapped
+            if msg.is_kidnapped == False and self.last_kidnapped == True:
+                self.get_logger().info("The robot is deployed")
+                self.relocate()     
+                self.is_kidnapped = msg.is_kidnapped # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
+                self.timer.reset()
+            
+            self.last_kidnapped = self.is_kidnapped
 
 
 
@@ -295,7 +303,7 @@ class PlannerHandler(Node):
         #rclpy.spin_until_future_complete(self.discovery_action_client, get_result_future)
         
         while not get_result_future.done():
-            self.get_logger().info("Waiting for the result 2")
+            # self.get_logger().info("Waiting for the result 2")
             rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
 
         result = get_result_future.result().result.next_action
@@ -352,8 +360,32 @@ class PlannerHandler(Node):
         euler = q.yaw_pitch_roll
         yaw = euler[0]
         # convert the yaw angle to degrees
-        approach_angle = yaw * 180 / 3.14159265359
-        return approach_angle
+        theta = yaw * 180 / 3.14159265359
+        return theta
+    
+    def plot_point_on_rviz(self):
+        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], "straighton", rho=3)
+        points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
+        ideal_relocation = points[0]
+        self.get_logger().info("I am relocating at ideal_relocation: " + str(ideal_relocation))
+
+        marker = Marker()
+        marker.header.frame_id = "map"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "center_point"
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        marker.pose.position.x = ideal_relocation[0]
+        marker.pose.position.y = ideal_relocation[1]
+        marker.pose.position.z = 0.0
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = 0.2  # Sphere diameter
+        marker.scale.y = 0.2
+        marker.scale.z = 0.2
+        marker.color.a = 1.0  # Transparency
+        marker.color.r = 1.0  # Green color
+
+        self.publisher_.publish(marker)
 
     def relocate(self):
         self.get_logger().info("Relocating the robot")
@@ -366,6 +398,7 @@ class PlannerHandler(Node):
         ideal_relocation = points[0]
         self.action_payload = (points[1][0],points[1][1],angle) # the action payload is the last point of the crossing where the robot has to search for the traffic sign
         self.navigator.setInitialPose(self.navigator.getPoseStamped(ideal_relocation, angle))
+
         self.get_logger().info("The ideal relocation is: " + str(ideal_relocation))
         self.next_goal = self.last_goal
         self.nav_goal = self.last_nav_goal

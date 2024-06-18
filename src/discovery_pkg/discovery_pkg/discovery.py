@@ -34,7 +34,7 @@ class Discovery(Node):
         # ROBADIADO
         self._bridge = cv_bridge.CvBridge()
         self._detector = QReader(model_size="n")
-        self.active = True # METTI FALSE DOPO
+        self.active = False # METTI FALSE DOPO
         self._image_sub = self.create_subscription(CompressedImage, "/oakd/rgb/preview/image_raw/compressed", self.on_imageread, 10) # METTI PREVIEW DOPO
         self.sign_sub = self.create_subscription(String, "/test_sign", self.on_davide, 10)
         # ROBADIADO
@@ -219,4 +219,4 @@ def main(args=None):
     try:
         executor.spin()
     except KeyboardInterrupt:
-        discovery_node.destroy
+        discovery_node.destroy()
