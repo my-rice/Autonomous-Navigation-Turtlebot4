@@ -43,13 +43,13 @@ class Discovery(Node):
         self.cancel_requested = False
 
         self.mutex = threading.Lock()
-        self.timer = self.create_timer(0.5, self.run)
+        #self.timer = self.create_timer(0.5, self.run)
 
         self.get_logger().info("Subscribed to topics")
 
-    def run(self):
-        self.get_logger().info("Running")
-        self.get_logger().info(f"amcl_pose: {self.amcl_pose}, nav_thread: {self.nav_thread}, active: {self.active}, found: {self.found}, road_sign: {self.road_sign}")
+    #def run(self):
+        #self.get_logger().info("Running")
+        #self.get_logger().info(f"amcl_pose: {self.amcl_pose}, nav_thread: {self.nav_thread}, active: {self.active}, found: {self.found}, road_sign: {self.road_sign}")
 
     def on_davide(self, msg):
         if self.active:
@@ -69,6 +69,12 @@ class Discovery(Node):
                 self.get_logger().info('Cancelling navigation thread')
                 self.navigator.cancelTask()
                 self.cancel_requested = True
+                self.road_sign = "Canceled"
+                self.found = True
+                # cancel the nav thread
+            
+                self.nav_thread
+
         return CancelResponse.ACCEPT
 
     def read_parameters(self, config_path):

@@ -17,6 +17,7 @@ import time
 import math
 from pyquaternion import Quaternion
 
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 
 class GoalNotValidException(Exception):
     """Exception raised when the goal is not valid."""
@@ -95,21 +96,19 @@ class PlannerHandler(Node):
 
     def __init__(self):
         super().__init__("Info") # Init node
-        self.sub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10)
-        
+
+        self.timer_mutual_exclusion_group = MutuallyExclusiveCallbackGroup()
+        self.parallel_group = ReentrantCallbackGroup()
+        self.kidnap_group = ReentrantCallbackGroup()
+        self.sub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10, callback_group=self.parallel_group)
         
         # self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, 10)
         
         # TOPIC FOR TESTING PURPOSES: to test the recovery mode, we need to kidnap the robot
-        self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_callback, 10)
+        self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_callback, 10, callback_group=self.kidnap_group)
         
 
-        self.subscription = self.create_subscription(
-            PoseWithCovarianceStamped,
-            '/initialpose',
-            self.listener_callback,
-            10)
-        self.subscription  # prevent unused variable warning
+        self.subscription = self.create_subscription(PoseWithCovarianceStamped,'/initialpose',self.listener_callback,10, callback_group=self.parallel_group)
 
         # Create an action client for the discovery mode
         self.discovery_action_client = DiscoveryActionClient()
@@ -149,7 +148,7 @@ class PlannerHandler(Node):
             rclpy.shutdown() #TODO: raise exception and exit
             exit()
        
-        self.timer = self.create_timer(self.timer, self.run)
+        self.timer = self.create_timer(self.timer, self.run, callback_group=self.timer_mutual_exclusion_group)
 
     def read_parameters(self):
         self.get_logger().info("Reading parameters from the config file: " + self.config_path)
@@ -191,6 +190,7 @@ class PlannerHandler(Node):
             self.get_logger().info("The robot is deployed")
             self.relocate()     
             self.is_kidnapped = msg.data # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
+            self.timer.reset()
         
         self.last_kidnapped = self.is_kidnapped
 
@@ -401,8 +401,10 @@ class PlannerHandler(Node):
         # Cancel the current goal
         self.get_logger().info("Aborting the current goal")
         self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
+        self.timer.cancel()
         if self.nav_thread is not None:
             self.navigator.cancelTask()
+            self.get_logger().info("canceling the ")
             self.nav_thread.join()
             self.nav_thread = None
             self.flag = True
@@ -424,10 +426,7 @@ class PlannerHandler(Node):
             self.nav_thread.join()
             self.nav_thread = None
             self.discovery_flag = True
-            
-            
-
-
+                
         
         if self.flag and (self.nav_thread is None or not self.nav_thread.is_alive()): # If the robot has reached the goal, or it is the first time the robot is deployed or the robot is not running any navigation task, look for the next sign road, compute the next goal and start the navigation towards the next goal
             self.flag = False #TODO change the name of the flag, it is not clear!!! 
@@ -478,7 +477,10 @@ class PlannerHandler(Node):
             self.last_nav_goal = self.nav_goal # save the last navigation goal
 
             self.result = self.discovery_mode(pose)
-
+            if self.result == "Canceled": # If the discovery mode has been canceled, then we need to abort the current iteration
+                self.flag = True
+                self.discovery_flag = False
+                return
 
             self.get_logger().info("RESULT: " + str(self.result))
             
@@ -502,8 +504,6 @@ class PlannerHandler(Node):
             points = self.order_by_distance(intersection_points, x, y)
             self.nav_goal = (points[0][0], points[0][1], angle)
             self.action_payload = (points[1][0],points[1][1],angle)
-                
-
 
             self.flag = True
             self.discovery_flag = False
