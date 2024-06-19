@@ -5,15 +5,11 @@ from turtlebot4_navigation.turtlebot4_navigator import TurtleBot4Directions, Tur
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from irobot_create_msgs.msg import KidnapStatus
 
-# import boolean msg
 from std_msgs.msg import Bool
 
 from rclpy.action import ActionClient
 from discovery_interface.action import DiscoveryAction
 import yaml
-import random
-import threading
-import time
 import math
 from pyquaternion import Quaternion
 from visualization_msgs.msg import Marker
@@ -175,6 +171,7 @@ class PlannerHandler(Node):
 
         self.timer = config['planner_parameters']['timer_period']
         self.timeout = config['planner_parameters']['timeout']
+        self.rho = config['planner_parameters']['rho']
         self.nodes = config['map']['nodes']
         self.connections = config['map']['connections']
 
@@ -292,16 +289,6 @@ class PlannerHandler(Node):
         y = current_pose[1]
         theta = current_pose[2]
         
-        # if it is the first discovery, then we need to compute the first goal
-        if(self.first_discovery == True):
-            self.get_logger().info("The first discovery")
-            # We suppose that the robot has been placed near the first goal with a "correct" approach angle
-            discovery_goal_intersects, angle = self.get_intersection_points(self.next_goal, theta)
-            points = self.order_by_distance(discovery_goal_intersects, x, y)
-            self.action_payload = (points[1][0],points[1][1],angle)
-            self.first_discovery = False
-            self.get_logger().info("THe action payload is: " + str(self.action_payload )+ "and the nearest goal is: " + str(self.next_goal))
-
         self.get_logger().info("sending the goal to the discovery action server: " + str(self.action_payload) + " and the current pose is: " + str(current_pose))
         
         # send the goal to the discovery action server and wait for the result
@@ -378,7 +365,7 @@ class PlannerHandler(Node):
     
     def plot_point_on_rviz(self):
         """Plot the ideal relocation point on rviz."""
-        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], "straighton", rho=3)
+        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], self.rho)
         points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
         ideal_relocation = points[0]
         self.get_logger().info("I am relocating at ideal_relocation: " + str(ideal_relocation))
@@ -429,6 +416,62 @@ class PlannerHandler(Node):
         self.discovery_flag = False
         self.discovery_action_client.cancel_goal()
 
+    def compute_first_goal(self, pose):
+        """Compute the first goal of the robot. The first goal is the nearest goal to the robot based on the robot's orientation and given the characteristics of the map. The last goal is the goal that it is located behind the robot."""
+        x, y, theta = pose
+        possible_goals = []
+        possible_last_goals = []
+        if theta < 45 or theta >= 315: 
+            
+            for x_m,y_m  in self.map.keys():
+                if x_m > x:
+                    possible_goals.append((x_m,y_m))
+                elif x_m < x:
+                    possible_last_goals.append((x_m,y_m))
+
+        elif theta < 135:
+            
+            for x_m,y_m  in self.map.keys():
+                if y_m > y:
+                    possible_goals.append((x_m,y_m))
+                elif y_m < y:
+                    possible_last_goals.append((x_m,y_m))
+
+        elif theta < 225:
+            
+            for x_m,y_m  in self.map.keys():
+                if x_m < x:
+                    possible_goals.append((x_m,y_m))
+                elif x_m > x:
+                    possible_last_goals.append((x_m,y_m))
+
+        elif theta < 315:
+            
+            for x_m,y_m  in self.map.keys():
+                if y_m < y:
+                    possible_goals.append((x_m,y_m))
+                elif y_m > y:
+                    possible_last_goals.append((x_m,y_m))
+
+        # the next goal is the nearest goal to the robot
+        min_distance = float("inf")
+        for goal in possible_goals:
+            distance = (goal[0] - x) ** 2 + (goal[1] - y) ** 2
+            if distance < min_distance:
+                min_distance = distance
+                next_goal = goal
+        
+        # the last goal is the nearest goal to the robot
+        min_distance = float("inf")
+        for goal in possible_last_goals:
+            distance = (goal[0] - x) ** 2 + (goal[1] - y) ** 2
+            if distance < min_distance:
+                min_distance = distance
+                last_goal = goal
+
+
+        return next_goal,last_goal
+
 
     def run(self):
         """ Main loop of the planner. The planner is in charge of computing the next goal based on the result of the road sign. The planner is in different modes: discovery mode, navigation mode, and recovery mode.
@@ -445,23 +488,27 @@ class PlannerHandler(Node):
             if self.first_discovery == True:
                 x = self.amcl_pose.pose.pose.position.x
                 y = self.amcl_pose.pose.pose.position.y
-                theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
+                orientation = self.amcl_pose.pose.pose.orientation
+                theta = self.get_angle(orientation)
                 pose = (x, y, theta)
 
-                self.nav_goal = (x, y, theta) # TODO: if I am out of the circle, then I need to go to the circonference, so I need to update the nav_goal
-                self.get_logger().info("The first discovery: " + str(self.nav_goal))
-                self.last_nav_goal = (x, y, theta)
-                # Find the next goal
-                min_distance = float("inf")
-                for goal in self.map:
-                    distance = (goal[0] - x) ** 2 + (goal[1] - y) ** 2
-                    if distance < min_distance:
-                        min_distance = distance
-                        self.next_goal = goal
-                        self.last_goal = goal
-                
-                #TODO: se la posa iniziale è troppo lontana dal goal iniziale, allora bisogna avvicinarsi e poi fare la discovery
+                self.next_goal,self.last_goal = self.compute_first_goal(pose)
+
+                approach_angle = self.get_approach_angle(self.next_goal, self.last_goal, orientation)
+                intersection_points, angle = self.get_intersection_points(self.next_goal, approach_angle, rho=self.rho)
+                points = self.order_by_distance(intersection_points, x, y)
+                self.action_payload = (points[1][0],points[1][1],angle)
+                self.nav_goal = (points[0][0], points[0][1], angle)
+
+                distance_to_goal = (self.next_goal[0] - x) ** 2 + (self.next_goal[1] - y) ** 2
+                if distance_to_goal > self.rho:
+                    # if the robot is too far from the goal, then we need to approach the goal
+                    x, y ,angle= map(float, self.nav_goal)
+                    self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))        
+                else:
+                    self.nav_goal = pose # If the robot is close to the goal then the navigation goal is the current pose of the robot, so there will be no problem for the discovery mode
                 self.discovery_flag = True
+                self.first_discovery = False
             else:    
                 # compute the navigation goal: which is a particular point on the way to the next goal where the robot has to search for the road sign
                 self.get_logger().info("THe nav goal is: " + str(self.nav_goal))
@@ -507,19 +554,10 @@ class PlannerHandler(Node):
             y = self.amcl_pose.pose.pose.position.y
             
             # compute the angolar coefficient of the line that connects the next goal to the last goal. This will be the approach angle to the next goal
-            if self.last_goal != self.next_goal:
-                theta = math.atan2(self.next_goal[1] - self.last_goal[1], self.next_goal[0] - self.last_goal[0]) * 180 / math.pi
-            else:
-                theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
-                theta += self.compute_next_angle(self.result)
-                if theta >= 360:
-                    theta -= 360
-                
-            if theta < 0:
-                theta += 360
-            pose = (x, y, theta)
+            approach_angle = self.get_approach_angle(self.next_goal, self.last_goal, self.amcl_pose.pose.pose.orientation)
+            #pose = (x, y, approach_angle)
 
-            intersection_points, angle = self.get_intersection_points(self.next_goal, theta)
+            intersection_points, angle = self.get_intersection_points(self.next_goal, approach_angle)
             points = self.order_by_distance(intersection_points, x, y)
             self.nav_goal = (points[0][0], points[0][1], angle)
             self.action_payload = (points[1][0],points[1][1],angle)
@@ -527,6 +565,20 @@ class PlannerHandler(Node):
             self.flag = True
             self.discovery_flag = False
 
+    def get_approach_angle(self, next_goal, last_goal, current_orientation: Quaternion):
+        """Compute the approach angle to the next goal. The approach angle is the angle between the line connecting the last goal and the next goal and the x-axis of the map."""
+        if last_goal != next_goal:
+                approach_angle = math.atan2(next_goal[1] - last_goal[1], next_goal[0] - last_goal[0]) * 180 / math.pi
+        else:
+            approach_angle = self.get_angle(current_orientation) # From the pose of the robot
+            approach_angle += self.compute_next_angle(self.result)
+            if approach_angle >= 360:
+                approach_angle -= 360
+            
+        if approach_angle < 0:
+            approach_angle += 360
+        
+        return approach_angle
 
 def main(args=None):
     rclpy.init(args=args)

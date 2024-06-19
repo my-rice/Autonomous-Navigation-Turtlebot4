@@ -99,3 +99,4 @@ map:
 planner_parameters:
   timer_period: 0.1
   timeout: 10.0
+  rho: 3.0
