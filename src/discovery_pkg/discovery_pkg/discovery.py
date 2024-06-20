@@ -12,18 +12,22 @@ import time
 import cv_bridge
 from sensor_msgs.msg import CompressedImage
 from sig_rec.qreader import QReader
-from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
+from std_msgs.msg import String
 
 class Discovery(Node):
     def __init__(self, node_name, config_path=None, **kwargs):
         super().__init__(node_name, **kwargs)
+        self.mutual_exclusion_group = MutuallyExclusiveCallbackGroup()
+
         self._action_server = ActionServer(
             self,
             DiscoveryAction,
             'discovery_mode',
             self.discovery_mode_callback,
             goal_callback=self.goal_callback,
-            cancel_callback=self.cancel_callback)
+            cancel_callback=self.cancel_callback,
+            callback_group=self.mutual_exclusion_group)
         self.get_logger().info("Action Server 'discovery_mode' is ready")
         self.navigator = TurtleBot4Navigator()
         self.read_parameters(config_path)
@@ -37,7 +41,7 @@ class Discovery(Node):
         self._detector = QReader(model_size="n")
         self.active = False # METTI FALSE DOPO
         self._image_sub = self.create_subscription(CompressedImage, "/oakd/rgb/preview/image_raw/compressed", self.on_imageread, 10, callback_group=self.parallel_group) # METTI PREVIEW DOPO
-        # self.sign_sub = self.create_subscription(String, "/test_sign", self.on_davide, 10)
+        self.sign_sub = self.create_subscription(String, "/test_sign", self.on_davide, 10,callback_group=self.parallel_group)
         # ROBADIADO
 
         self.cancel_requested = False
@@ -49,12 +53,12 @@ class Discovery(Node):
         self.get_logger().info("Subscribed to topics")
 
 
-    # def on_davide(self, msg):
-    #     if self.active:
-    #         self.found = True
-    #         self.road_sign = msg.data
-    #         self.navigator.cancelTask()
-    #         self.get_logger().info(msg.data)
+    def on_davide(self, msg):
+        if self.active:
+            self.found = True
+            self.road_sign = msg.data
+            self.navigator.cancelTask()
+            self.get_logger().info(msg.data)
 
     def goal_callback(self, goal_request):
         self.get_logger().info('Received goal request')
@@ -107,10 +111,11 @@ class Discovery(Node):
                         self.is_navigating = True
 
                     while not self.navigator.isTaskComplete():
-                        rclpy.spin_once(self, timeout_sec=0.1)
+                        self.get_logger().info("Waiting for spin task completion")
+                        # rclpy.spin_once(self, timeout_sec=0.1)
                     self.is_navigating = False
                     
-                    rclpy.spin_once(self, timeout_sec=1.0)
+                    time.sleep(1)
                     with self.mutex_sign:
                         if self.found:
                             self.get_logger().info(f"Found road sign: {self.road_sign}")
@@ -125,7 +130,8 @@ class Discovery(Node):
                     self.navigator.goToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
                     self.is_navigating = True
                 while not self.navigator.isTaskComplete():
-                        rclpy.spin_once(self, timeout_sec=0.1)
+                    self.get_logger().info("Waiting for navigation task completion")
+                        # rclpy.spin_once(self, timeout_sec=0.1)
                 self.is_navigating = False
                 with self.mutex_sign:
                     if self.found:
@@ -198,8 +204,8 @@ class Discovery(Node):
                         with self.mutex_sign:
                             self.found = True
                             self.road_sign = content
-                            self.navigator.cancelTask()
                             self.get_logger().info("SEGNALE LETTO: "+ str(content))
+                            self.navigator.cancelTask()
 
 def main(args=None):
     rclpy.init(args=args)

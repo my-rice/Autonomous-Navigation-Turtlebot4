@@ -192,7 +192,7 @@ class PlannerHandler(Node):
 
     def kidnapped_callback(self, msg):
         """Callback function for the kidnapped topic. It updates the kidnapped status of the robot, and it handles the kidnapped mode. This is a part of the recovery mode."""
-        self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
+        # self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
         if(self.initial_pose_flag):
             if msg.is_kidnapped == True and self.last_kidnapped == False:
                 # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
@@ -303,7 +303,7 @@ class PlannerHandler(Node):
         goal_handle = future_goal.result()
         get_result_future = goal_handle.get_result_async()
         while not get_result_future.done():
-            # self.get_logger().info("Waiting for the result 2")
+            self.get_logger().info("Waiting for the result 2")
             rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
 
         result = get_result_future.result().result.next_action
@@ -419,6 +419,10 @@ class PlannerHandler(Node):
     def compute_first_goal(self, pose):
         """Compute the first goal of the robot. The first goal is the nearest goal to the robot based on the robot's orientation and given the characteristics of the map. The last goal is the goal that it is located behind the robot."""
         x, y, theta = pose
+        if(theta<0):
+            theta += 360
+        if(theta>=360):
+            theta -= 360
         possible_goals = []
         possible_last_goals = []
         if theta < 45 or theta >= 315: 
@@ -491,7 +495,6 @@ class PlannerHandler(Node):
                 orientation = self.amcl_pose.pose.pose.orientation
                 theta = self.get_angle(orientation)
                 pose = (x, y, theta)
-
                 self.next_goal,self.last_goal = self.compute_first_goal(pose)
 
                 approach_angle = self.get_approach_angle(self.next_goal, self.last_goal, orientation)
