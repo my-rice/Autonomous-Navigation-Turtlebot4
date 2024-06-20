@@ -6,13 +6,13 @@ from rclpy.action import ActionServer
 from turtlebot4_navigation.turtlebot4_navigator import TurtleBot4Navigator
 import yaml
 import threading
-from std_msgs.msg import String
 import math
 from rclpy.action import CancelResponse, GoalResponse
 import time
 import cv_bridge
 from sensor_msgs.msg import CompressedImage
 from sig_rec.qreader import QReader
+from rclpy.callback_groups import ReentrantCallbackGroup
 
 class Discovery(Node):
     def __init__(self, node_name, config_path=None, **kwargs):
@@ -30,16 +30,16 @@ class Discovery(Node):
         self.found = False
         self.road_sign = None
         self.amcl_pose = None
-        
+        self.parallel_group = ReentrantCallbackGroup()
+        self.is_navigating = False
         # ROBADIADO
         self._bridge = cv_bridge.CvBridge()
         self._detector = QReader(model_size="n")
         self.active = False # METTI FALSE DOPO
-        self._image_sub = self.create_subscription(CompressedImage, "/oakd/rgb/preview/image_raw/compressed", self.on_imageread, 10) # METTI PREVIEW DOPO
-        self.sign_sub = self.create_subscription(String, "/test_sign", self.on_davide, 10)
+        self._image_sub = self.create_subscription(CompressedImage, "/oakd/rgb/preview/image_raw/compressed", self.on_imageread, 10, callback_group=self.parallel_group) # METTI PREVIEW DOPO
+        # self.sign_sub = self.create_subscription(String, "/test_sign", self.on_davide, 10)
         # ROBADIADO
 
-        self.nav_thread = None
         self.cancel_requested = False
 
         self.mutex = threading.Lock()
@@ -48,16 +48,13 @@ class Discovery(Node):
 
         self.get_logger().info("Subscribed to topics")
 
-    # def run(self):
-    #     self.get_logger().info("Running")
-    #     self.get_logger().info(f"amcl_pose: {self.amcl_pose}, nav_thread: {self.nav_thread}, active: {self.active}, found: {self.found}, road_sign: {self.road_sign}")
 
-    def on_davide(self, msg):
-        if self.active:
-            self.found = True
-            self.road_sign = msg.data
-            self.navigator.cancelTask()
-            self.get_logger().info(msg.data)
+    # def on_davide(self, msg):
+    #     if self.active:
+    #         self.found = True
+    #         self.road_sign = msg.data
+    #         self.navigator.cancelTask()
+    #         self.get_logger().info(msg.data)
 
     def goal_callback(self, goal_request):
         self.get_logger().info('Received goal request')
@@ -66,15 +63,13 @@ class Discovery(Node):
     def cancel_callback(self, goal_handle):
         self.get_logger().info('Received cancel request')
         with self.mutex:
-            if self.nav_thread is not None and self.nav_thread.is_alive():
+            if self.is_navigating:
                 self.get_logger().info('Cancelling navigation thread')
                 self.navigator.cancelTask()
                 self.cancel_requested = True
                 self.road_sign = "Canceled"
                 self.found = True
-                # cancel the nav thread
             
-                self.nav_thread
 
         return CancelResponse.ACCEPT
 
@@ -107,10 +102,15 @@ class Discovery(Node):
             self.get_logger().info(f"Point: {point}")
             for i in [-1, 2, -1]:
                 try:
-                    self.navigator.spin(spin_dist=math.radians(actual_spin_dist * i))
+                    with self.mutex:
+                        self.navigator.spin(spin_dist=math.radians(actual_spin_dist * i))
+                        self.is_navigating = True
+
                     while not self.navigator.isTaskComplete():
-                        time.sleep(0.1)
-                    time.sleep(1)
+                        rclpy.spin_once(self, timeout_sec=0.1)
+                    self.is_navigating = False
+                    
+                    rclpy.spin_once(self, timeout_sec=1.0)
                     with self.mutex_sign:
                         if self.found:
                             self.get_logger().info(f"Found road sign: {self.road_sign}")
@@ -121,7 +121,12 @@ class Discovery(Node):
                     break
             actual_spin_dist -= 5
             try:
-                self.navigator.startToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
+                with self.mutex:
+                    self.navigator.goToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
+                    self.is_navigating = True
+                while not self.navigator.isTaskComplete():
+                        rclpy.spin_once(self, timeout_sec=0.1)
+                self.is_navigating = False
                 with self.mutex_sign:
                     if self.found:
                         self.get_logger().info(f"Found road sign: {self.road_sign}")
@@ -143,16 +148,8 @@ class Discovery(Node):
 
         self.found = False
         self.road_sign = None
-
-        with self.mutex:
-            self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y, self.n_points, self.spin_dist))
-            self.nav_thread.start()
-
-        self.get_logger().info("Ready to join navigation thread")
-        # while self.nav_thread.is_alive():
-        #     rclpy.spin_once(self, timeout_sec=0.1)
-        self.nav_thread.join()
-        self.nav_thread = None
+        self.start_navigation(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y, self.n_points, self.spin_dist)
+        
         self.active = False
 
         if self.cancel_requested:
@@ -164,17 +161,12 @@ class Discovery(Node):
             return result
 
         if self.road_sign is None:
-            with self.mutex:
-                self.active = True
-                increment_x = (goal.goal_pose_x - goal.start_pose_x)
-                increment_y = (goal.goal_pose_y - goal.start_pose_y)
-                self.nav_thread = threading.Thread(target=self.start_navigation, args=(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x-increment_x/3, goal.start_pose_y-increment_y/3, self.n_points+2, self.spin_dist+10))
-                self.nav_thread.start()
-            # while self.nav_thread.is_alive():
-            #     rclpy.spin_once(self, timeout_sec=0.1)
+            self.active = True
+            increment_x = (goal.goal_pose_x - goal.start_pose_x)
+            increment_y = (goal.goal_pose_y - goal.start_pose_y)
+            self.start_navigation(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x-increment_x/3, goal.start_pose_y-increment_y/3, self.n_points+2, self.spin_dist+10)
+       
             
-            self.nav_thread.join()
-            self.nav_thread = None
             self.get_logger().info("Ready to join navigation thread 2")
             self.active = False
 
@@ -194,7 +186,7 @@ class Discovery(Node):
 
     def on_imageread(self, msg):
         self.get_logger().info("Image received")
-        if self.active:
+        if self.active and not self.found:
             image_msg = msg
             cv_image = self._bridge.compressed_imgmsg_to_cv2(image_msg)
             decoded_qrs, locations = self._detector.detect_and_decode(
