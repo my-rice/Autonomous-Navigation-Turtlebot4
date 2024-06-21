@@ -16,6 +16,7 @@ from visualization_msgs.msg import Marker
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 import time
 
+import threading
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 
 class GoalNotValidException(Exception):
@@ -170,6 +171,7 @@ class PlannerHandler(Node):
         # Create a subscription to the kidnapped topic only after the initial pose has been set
         #self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
         
+        self.nav_thread = None
 
         self.init_planner_internal_state()
 
@@ -355,8 +357,9 @@ class PlannerHandler(Node):
         goal_handle = future_goal.result()
         get_result_future = goal_handle.get_result_async()
         self.get_logger().info("Waiting" + str(get_result_future))
-        while not get_result_future.done() or not get_result_future.canceled():
-            self.get_logger().info("Waiting for the result:" + str(get_result_future))
+        while not get_result_future.done() and not get_result_future.cancelled():
+            self.get_logger().info("done: " + str(get_result_future.done()) + " cancelled: " + str(get_result_future.cancelled()))
+            self.get_logger().info("Waiting for the result:")
             rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
 
         result = get_result_future.result().result.next_action
@@ -460,16 +463,18 @@ class PlannerHandler(Node):
         
 
     def abort(self):
-        """"Abort the current goal. The robot has to stop the current goal and do nothing. The robot will be ready to know what to do next."""
         # Cancel the current goal
         self.get_logger().info("Aborting the current goal")
         self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
         self.timer.cancel()
-        self.navigator.cancelTask()
-        self.flag = True
-        self.discovery_flag = False
+        if self.nav_thread is not None:
+            self.navigator.cancelTask()
+            self.get_logger().info(" NAV THREAD ACTIVE ")
+            self.nav_thread.join()
+            self.nav_thread = None
+            self.flag = True
+            self.discovery_flag = False
         self.discovery_action_client.cancel_goal()
-        self.get_logger().info("ABORTED 1")
 
     def compute_first_goal(self, pose):
         """Compute the first goal of the robot. The first goal is the nearest goal to the robot based on the robot's orientation and given the characteristics of the map. The last goal is the goal that it is located behind the robot."""
@@ -531,14 +536,24 @@ class PlannerHandler(Node):
 
         return next_goal,last_goal
 
+    def start_navigation(self, x, y, angle=0):
+        self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
+
 
     def run(self):
         """ Main loop of the planner. The planner is in charge of computing the next goal based on the result of the road sign. The planner is in different modes: discovery mode, navigation mode, and recovery mode.
         The planner is in discovery mode when the robot is searching for the road sign. The planner is in navigation mode when the robot is navigating to the next goal. The planner is in recovery mode when the robot has been kidnapped and it needs to be relocated to the ideal relocation point."""
         if self.initial_pose_flag == False or self.is_kidnapped:
             return        
-                        
-        if self.flag and not self.is_kidnapped:
+
+        if self.nav_thread is not None and not self.nav_thread.is_alive():
+            # if the robot has reached the goal, then we need to join the navigation thread and set the flag to True, so that the robot can compute the next goal
+            self.nav_thread.join()
+            self.nav_thread = None
+            self.discovery_flag = True
+                
+        
+        if self.flag and (self.nav_thread is None or not self.nav_thread.is_alive()): # If the robot has reached the goal, or it is the first time the robot is deployed or the robot is not running any navigation task, look for the next sign road, compute the next goal and start the navigation towards the next goal
             self.flag = False #TODO change the name of the flag, it is not clear!!! 
                               # The flag is used to avoid entering in the if statement multiple times.
             # get the current pose of the robot
@@ -557,6 +572,7 @@ class PlannerHandler(Node):
                 else:
                     self.nav_goal = pose # If the robot is close to the goal then the navigation goal is the current pose of the robot, so there will be no problem for the discovery mode
                 self.first_discovery = False
+                self.discovery_flag = True
             else:    
                 # compute the navigation goal: which is a particular point on the way to the next goal where the robot has to search for the road sign
                 self.get_logger().info("THe nav goal is: " + str(self.nav_goal))
@@ -565,10 +581,8 @@ class PlannerHandler(Node):
             
                 # Start the navigation in a separate thread
                 x, y ,angle= map(float, self.nav_goal)
-                
-                self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
-            
-            self.discovery_flag = True
+                self.nav_thread = threading.Thread(target=self.start_navigation, args=(x, y, angle))
+                self.nav_thread.start()
             
         if self.discovery_flag == True and not self.is_kidnapped:
             self.get_logger().info("self.discovery_flag == True")
