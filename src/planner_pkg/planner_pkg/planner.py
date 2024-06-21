@@ -227,40 +227,39 @@ class PlannerHandler(Node):
     def kidnapped_callback(self, msg):
         """Callback function for the kidnapped topic. It updates the kidnapped status of the robot, and it handles the kidnapped mode. This is a part of the recovery mode."""
         # self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
-        if(self.initial_pose_flag):
-            if msg.is_kidnapped == True and self.last_kidnapped == False:
-                # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
-                self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
-                self.is_kidnapped = msg.is_kidnapped
-                self.abort() # abort the current goal
-                #self.plot_point_on_rviz()
+        if msg.is_kidnapped == True and self.last_kidnapped == False:
+            # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
+            self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
+            self.is_kidnapped = msg.is_kidnapped
+            self.abort() # abort the current goal
+            #self.plot_point_on_rviz()
 
-            if msg.is_kidnapped == False and self.last_kidnapped == True:
-                self.get_logger().info("The robot is deployed")
-                self.relocate()     
-                self.is_kidnapped = msg.is_kidnapped # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
-                self.timer.reset()
-            
-            self.last_kidnapped = self.is_kidnapped
+        if msg.is_kidnapped == False and self.last_kidnapped == True:
+            self.get_logger().info("The robot is deployed")
+            self.relocate()     
+            self.is_kidnapped = msg.is_kidnapped # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
+            self.timer.reset()
+        
+        self.last_kidnapped = self.is_kidnapped
 
     def kidnapped_test_callback(self, msg):
         """Callback function that behave the same as kidnapped_callback. It is used only for testing in simulation."""
         # self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
-        if(self.initial_pose_flag):
-            if msg.data == True and self.last_kidnapped == False:
-                # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
-                self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
-                self.is_kidnapped = msg.data
-                self.abort() # abort the current goal
-                #self.plot_point_on_rviz()
 
-            if msg.data == False and self.last_kidnapped == True:
-                self.get_logger().info("The robot is deployed")
-                self.relocate()     
-                self.is_kidnapped = msg.data # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
-                self.timer.reset()
-            
-            self.last_kidnapped = self.is_kidnapped
+        if msg.data == True and self.last_kidnapped == False:
+            # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
+            self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
+            self.is_kidnapped = msg.data
+            self.abort() # abort the current goal
+            #self.plot_point_on_rviz()
+
+        if msg.data == False and self.last_kidnapped == True:
+            self.get_logger().info("The robot is deployed")
+            self.relocate()     
+            self.is_kidnapped = msg.data # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
+            self.timer.reset()
+        
+        self.last_kidnapped = self.is_kidnapped
 
     def build_p_map(self):
         """Build the map used by the planner to compute the next goal. The map is a dictionary where the key is the coordinates of the node and the value is a list of tuples. Each tuple contains the coordinates of the neighbor node and the direction to reach the neighbor node."""
@@ -347,16 +346,14 @@ class PlannerHandler(Node):
   
         while not future_goal.done():
             self.get_logger().info("Waiting for the result ... ")
-            #rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
-            time.sleep(0.5)
+            rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
         self.get_logger().info("The result is ready, getting the result ... ")
 
         goal_handle = future_goal.result()
         get_result_future = goal_handle.get_result_async()
         while not get_result_future.done() or not get_result_future.cancelled():
             self.get_logger().info("Waiting for the result 2")
-            #rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
-            time.sleep(0.5)
+            rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
 
         result = get_result_future.result().result.next_action
         return result
