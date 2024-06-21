@@ -36,6 +36,7 @@ commands = [
     'source install/setup.bash && ros2 launch turtlebot4_viz view_robot.launch.py use_sim_time:=true',
     'source install/setup.bash && ros2 run discovery_pkg discovery --ros-args --remap use_sim_time:=true', 
     'source install/setup.bash && ros2 launch planner_pkg planner_launch.py use_sim_time:=true',
+    'source install/setup.bash && ros2 topic pub /test std_msgs/msg/Bool "{data: false}"'
 ]
 
 for i,cmd in enumerate(commands):
