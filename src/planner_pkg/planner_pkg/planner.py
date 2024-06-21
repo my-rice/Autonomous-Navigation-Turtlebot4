@@ -351,7 +351,7 @@ class PlannerHandler(Node):
 
         goal_handle = future_goal.result()
         get_result_future = goal_handle.get_result_async()
-        while not get_result_future.done() or not get_result_future.cancelled():
+        while not get_result_future.done() or not get_result_future.canceled():
             self.get_logger().info("Waiting for the result 2")
             rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
 
