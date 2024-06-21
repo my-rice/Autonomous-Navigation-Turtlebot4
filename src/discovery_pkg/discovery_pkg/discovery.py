@@ -44,7 +44,6 @@ class Discovery(Node):
         self.sign_sub = self.create_subscription(String, "/test_sign", self.on_davide, 10,callback_group=self.parallel_group)
         # ROBADIADO
 
-        self.cancel_requested = False
 
         self.mutex = threading.Lock()
         self.mutex_sign = threading.Lock()
@@ -70,7 +69,6 @@ class Discovery(Node):
             if self.is_navigating:
                 self.get_logger().info('Cancelling navigation thread')
                 self.navigator.cancelTask()
-                self.cancel_requested = True
                 self.road_sign = "Canceled"
                 self.found = True
             
@@ -119,11 +117,11 @@ class Discovery(Node):
                     with self.mutex_sign:
                         if self.found:
                             self.get_logger().info(f"Found road sign: {self.road_sign}")
-                            break
+                            return
                 except Exception as e:
                     self.get_logger().info(f"Error: {e}")
                     self.road_sign = "Error"
-                    break
+                    return
             actual_spin_dist -= 5
             try:
                 with self.mutex:
@@ -136,11 +134,11 @@ class Discovery(Node):
                 with self.mutex_sign:
                     if self.found:
                         self.get_logger().info(f"Found road sign: {self.road_sign}")
-                        break
+                        return
             except Exception as e:
                 self.get_logger().info(f"Error: {e}")
                 self.road_sign = "Error"
-                break
+                return
 
         self.get_logger().info("Navigation completed successfully")
 
@@ -158,10 +156,9 @@ class Discovery(Node):
         
         self.active = False
 
-        if self.cancel_requested:
+        if goal_handle.is_cancel_requested:
             self.get_logger().info("Cancel requested")
-            goal_handle.abort()
-            self.cancel_requested = False
+            goal_handle.canceled()
             result.next_action = "Canceled"
             self.active = False
             return result
@@ -176,9 +173,8 @@ class Discovery(Node):
             self.get_logger().info("Ready to join navigation thread 2")
             self.active = False
 
-        if self.cancel_requested:
-            goal_handle.abort()
-            self.cancel_requested = False
+        if goal_handle.is_cancel_requested:
+            goal_handle.canceled()
             result.next_action = "Canceled"
             self.active = False
             self.get_logger().info(f"Canceled Goal handle: {goal_handle}")
