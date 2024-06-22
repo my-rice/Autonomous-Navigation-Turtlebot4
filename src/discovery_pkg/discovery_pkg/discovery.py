@@ -11,7 +11,7 @@ from rclpy.action import CancelResponse, GoalResponse
 import time
 import cv_bridge
 from sensor_msgs.msg import CompressedImage
-from sig_rec.qreader import QReader
+from discovery_pkg.qreader import QReader
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from std_msgs.msg import String
 
