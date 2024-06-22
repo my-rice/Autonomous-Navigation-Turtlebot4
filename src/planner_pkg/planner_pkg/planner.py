@@ -14,7 +14,7 @@ import math
 from pyquaternion import Quaternion
 from visualization_msgs.msg import Marker
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-import time
+import random
 
 import threading
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
@@ -236,7 +236,7 @@ class PlannerHandler(Node):
     #         self.is_kidnapped = msg.is_kidnapped
     #         self.abort() # abort the current goal
     #         self.get_logger().info("ABORTED 2")
-    #         #self.plot_point_on_rviz()
+    #         self.plot_point_on_rviz()
 
     #     if msg.is_kidnapped == False and self.last_kidnapped == True:
     #         self.get_logger().info("The robot is deployed")
@@ -255,7 +255,7 @@ class PlannerHandler(Node):
             self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
             self.is_kidnapped = msg.data
             self.abort() # abort the current goal
-            #self.plot_point_on_rviz()
+            self.plot_point_on_rviz()
             self.get_logger().info("ABORTED 2")
 
         if msg.data == False and self.last_kidnapped == True:
@@ -609,8 +609,16 @@ class PlannerHandler(Node):
                 #TODO: VALUTARE SE DEVO FARE QUALCOSA DOPO L'ABORT
                 raise ExitException("The robot has reached the final goal")
 
-            # compute the next goal based on the result
-            self.next_goal = self.action_result2goal(self.result, (x, y, theta), self.next_goal)
+                        
+            if self.result == "random":
+                # take all the possible neighbors 
+                self.get_logger().info("The robot has to choose a random goal")
+                neighbors = self.map[self.next_goal]
+                self.next_goal = random.choice(neighbors)[0]
+                self.get_logger().info("The next (random) goal is: " + str(self.next_goal))
+            else:
+                # compute the next goal based on the result
+                self.next_goal = self.action_result2goal(self.result, (x, y, theta), self.next_goal)
 
             # computing the next navigation goal
             x = self.amcl_pose.pose.pose.position.x
@@ -619,7 +627,8 @@ class PlannerHandler(Node):
             # compute the angolar coefficient of the line that connects the next goal to the last goal. This will be the approach angle to the next goal
             approach_angle = self.get_approach_angle(self.next_goal, self.last_goal, self.amcl_pose.pose.pose.orientation)
             #pose = (x, y, approach_angle)
-
+            
+            
             intersection_points, angle = self.get_intersection_points(self.next_goal, approach_angle)
             points = self.order_by_distance(intersection_points, x, y)
             self.nav_goal = (points[0][0], points[0][1], angle)
