@@ -422,7 +422,7 @@ class PlannerHandler(Node):
     def plot_point_on_rviz(self):
         """Plot the ideal relocation point on rviz."""
         self.get_logger().info("Plotting the ideal relocation point on rviz, the last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal))
-        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], self.rho)
+        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], self.rho+1)
         points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
         ideal_relocation = points[0]
         self.get_logger().info("I am relocating at ideal_relocation: " + str(ideal_relocation))
