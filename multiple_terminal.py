@@ -33,7 +33,7 @@ commands = [
     'source install/setup.bash && ros2 launch diem_gazebo turtlebot4_ignition_no_dock.launch.py use_sim_time:=true',#x:=-6.3 y:=0.0 world:=diem_map',
     'source install/setup.bash && ros2 launch turtlebot4_navigation localization.launch.py map:=src/map/diem_map.yaml use_sim_time:=true',
     'source install/setup.bash && ros2 launch turtlebot4_navigation nav2.launch.py params_file:=src/config_mobile_robots/nav2_params.yaml use_sim_time:=true',
-    'source install/setup.bash && ros2 launch turtlebot4_viz view_robot.launch.py use_sim_time:=true',
+    'source install/setup.bash && ros2 launch planner_pkg robot_launch.py use_sim_time:=true',
     'source install/setup.bash && ros2 run discovery_pkg discovery --ros-args --remap use_sim_time:=true', 
     'source install/setup.bash && ros2 launch planner_pkg planner_launch.py use_sim_time:=true',
     'source install/setup.bash && ros2 topic pub /test std_msgs/msg/Bool "{data: false}"'
