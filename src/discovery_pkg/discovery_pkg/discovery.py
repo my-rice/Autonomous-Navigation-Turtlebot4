@@ -15,6 +15,7 @@ from discovery_pkg.qreader import QReader
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from std_msgs.msg import String
 
+
 class Discovery(Node):
     def __init__(self, node_name, config_path=None, **kwargs):
         super().__init__(node_name, **kwargs)
@@ -34,12 +35,12 @@ class Discovery(Node):
         self.found = False
         self.road_sign = None
         self.amcl_pose = None
-        self.parallel_group = ReentrantCallbackGroup()
+        self.parallel_group = MutuallyExclusiveCallbackGroup()
         self.is_navigating = False
         # ROBADIADO
         self._bridge = cv_bridge.CvBridge()
         self._detector = QReader(model_size="n")
-        self.active = False # METTI FALSE DOPO
+        self.active = True # METTI FALSE DOPO
         self._image_sub = self.create_subscription(CompressedImage, "/oakd/rgb/preview/image_raw/compressed", self.on_imageread, 10, callback_group=self.parallel_group) # METTI PREVIEW DOPO
         self.sign_sub = self.create_subscription(String, "/test_sign", self.on_davide, 10,callback_group=self.parallel_group)
         # ROBADIADO
@@ -51,6 +52,12 @@ class Discovery(Node):
 
         self.get_logger().info("Subscribed to topics")
 
+    def destroy_node(self):
+        self.navigator.destroy_node()
+        self._action_server.destroy()
+        self._image_sub.destroy()
+        self.sign_sub.destroy()
+        super().destroy_node()
 
     def on_davide(self, msg):
         if self.active:
@@ -100,16 +107,17 @@ class Discovery(Node):
         for point in points:
             with self.mutex_sign:
                 if(self.found):
-                    break
+                    return
             self.get_logger().info(f"Point: {point}")
             for i in [-1, 2, -1]:
                 try:
                     with self.mutex:
+                        self.get_logger().info("Primo spin")
                         self.navigator.spin(spin_dist=math.radians(actual_spin_dist * i))
                         self.is_navigating = True
-
+                    self.get_logger().info("Primo while")
                     while not self.navigator.isTaskComplete():
-                        self.get_logger().info("Waiting for spin task completion")
+                        self.get_logger().info("Waiting for spin task completion 1")
                         # rclpy.spin_once(self, timeout_sec=0.1)
                     self.is_navigating = False
                     
@@ -128,7 +136,7 @@ class Discovery(Node):
                     self.navigator.goToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
                     self.is_navigating = True
                 while not self.navigator.isTaskComplete():
-                    self.get_logger().info("Waiting for navigation task completion")
+                    self.get_logger().info("Waiting for navigation task completion 2")
                         # rclpy.spin_once(self, timeout_sec=0.1)
                 self.is_navigating = False
                 with self.mutex_sign:
@@ -187,8 +195,10 @@ class Discovery(Node):
         return result
 
     def on_imageread(self, msg):
-        self.get_logger().info("Image received")
+        self.get_logger().info("Callback image read")
         if self.active and not self.found:
+            self.get_logger().info("Image received")
+
             image_msg = msg
             cv_image = self._bridge.compressed_imgmsg_to_cv2(image_msg)
             decoded_qrs, locations = self._detector.detect_and_decode(
@@ -197,11 +207,14 @@ class Discovery(Node):
             if decoded_qrs:
                 for content, location in zip(decoded_qrs, locations):
                     if content:
+                        self.get_logger().info("Ready to take mutex")
                         with self.mutex_sign:
                             self.found = True
                             self.road_sign = content
                             self.get_logger().info("SEGNALE LETTO: "+ str(content))
                             self.navigator.cancelTask()
+                        self.get_logger().info("Mutex released")
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -213,4 +226,8 @@ def main(args=None):
     try:
         executor.spin()
     except KeyboardInterrupt:
-        discovery_node.destroy()
+        discovery_node.get_logger().info("Keyboard Interrupt (SIGINT) COglione")
+    except Exception:
+        discovery_node.get_logger().info("Exception")
+    discovery_node.destroy_node()
+    

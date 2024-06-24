@@ -159,6 +159,7 @@ class PlannerHandler(Node):
 
         # Wait until the navigation2 is active
         self.navigator.waitUntilNav2Active()
+        self.navigator.clearAllCostmaps()
 
         # Wait until the action server is ready
         if(self.discovery_action_client.wait_for_server(self.timeout)):
@@ -169,7 +170,7 @@ class PlannerHandler(Node):
             exit()
 
         # Create a subscription to the kidnapped topic only after the initial pose has been set
-        #self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
+        self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
         
         self.nav_thread = None
 
@@ -177,11 +178,17 @@ class PlannerHandler(Node):
 
 
         # TOPIC FOR TESTING IN SIMULATION: to test the recovery mode, we need to kidnap the robot
-        self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
+        #self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
         
 
         # Start the timer for the planner that will run the main loop
         self.timer = self.create_timer(self.timer, self.run, callback_group=self.timer_mutual_exclusion_group)
+
+    def destroy_node(self):
+        self.navigator.destroy_node()
+        self.discovery_action_client.destroy()
+        rclpy.try_shutdown()
+        super().destroy_node()
 
     def init_planner_internal_state(self):
         x = self.amcl_pose.pose.pose.position.x
@@ -227,24 +234,24 @@ class PlannerHandler(Node):
             self.navigator.setInitialPose(initial_pose)
             self.get_logger().info('Initial pose received: {0} {1} {2}'.format(msg.pose.pose.position.x, msg.pose.pose.position.y, angle))
 
-    # def kidnapped_callback(self, msg):
-    #     """Callback function for the kidnapped topic. It updates the kidnapped status of the robot, and it handles the kidnapped mode. This is a part of the recovery mode."""
-    #     # self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
-    #     if msg.is_kidnapped == True and self.last_kidnapped == False:
-    #         # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
-    #         self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
-    #         self.is_kidnapped = msg.is_kidnapped
-    #         self.abort() # abort the current goal
-    #         self.get_logger().info("ABORTED 2")
-    #         self.plot_point_on_rviz()
+    def kidnapped_callback(self, msg):
+        """Callback function for the kidnapped topic. It updates the kidnapped status of the robot, and it handles the kidnapped mode. This is a part of the recovery mode."""
+        # self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
+        if msg.is_kidnapped == True and self.last_kidnapped == False:
+            # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
+            self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
+            self.is_kidnapped = msg.is_kidnapped
+            self.abort() # abort the current goal
+            self.get_logger().info("ABORTED 2")
+            self.plot_point_on_rviz()
 
-    #     if msg.is_kidnapped == False and self.last_kidnapped == True:
-    #         self.get_logger().info("The robot is deployed")
-    #         self.relocate()     
-    #         self.is_kidnapped = msg.is_kidnapped # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
-    #         self.timer.reset()
+        if msg.is_kidnapped == False and self.last_kidnapped == True:
+            self.get_logger().info("The robot is deployed")
+            self.relocate()     
+            self.is_kidnapped = msg.is_kidnapped # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
+            self.timer.reset()
         
-    #     self.last_kidnapped = self.is_kidnapped
+        self.last_kidnapped = self.is_kidnapped
 
     def kidnapped_test_callback(self, msg):
         """Callback function that behave the same as kidnapped_callback. It is used only for testing in simulation."""
@@ -347,6 +354,7 @@ class PlannerHandler(Node):
         self.get_logger().info("sending the goal to the discovery action server: " + str(self.action_payload) + " and the current pose is: " + str(current_pose))
         
         # send the goal to the discovery action server and wait for the result
+        self.navigator.clearAllCostmaps()
         future_goal = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]))
         self.get_logger().info("Waiting" + str(future_goal))
         while not future_goal.done():
@@ -363,6 +371,8 @@ class PlannerHandler(Node):
             rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
 
         result = get_result_future.result().result.next_action
+        self.navigator.clearAllCostmaps()
+
         return result
         
     def get_intersection_points(self, next_goal, approach_angle, rho=3):
@@ -652,6 +662,7 @@ class PlannerHandler(Node):
         
         return approach_angle
 
+
 def main(args=None):
     rclpy.init(args=args)
     executor = MultiThreadedExecutor()
@@ -660,16 +671,16 @@ def main(args=None):
     executor.add_node(planner)
 
     try:
-        executor.spin()
+        while rclpy.ok():
+            executor.spin()
     except KeyboardInterrupt:
-        pass
+        planner.get_logger().info("KeyboardInterrupt")
     
     except ExitException as e:
         planner.get_logger().info("The robot has reached the final goal")
     finally:
-        planner.get_logger().error(f"An error occurred: {e}")
+        planner.get_logger().info("Sei sicuro?")
     
-
     planner.destroy_node()
     rclpy.shutdown()
 
