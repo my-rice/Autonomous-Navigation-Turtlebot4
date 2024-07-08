@@ -113,17 +113,17 @@ class PlannerHandler(Node):
         self.timer_mutual_exclusion_group = MutuallyExclusiveCallbackGroup()
         self.parallel_group = ReentrantCallbackGroup()
         self.kidnap_group = MutuallyExclusiveCallbackGroup()
-        self.sub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10, callback_group=self.parallel_group)
+        self.pose_sub = self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.pose_callback, 10, callback_group=self.parallel_group)
         qos_reliable = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
             depth=10,
             reliability=ReliabilityPolicy.BEST_EFFORT
         )
         
-        self.publisher_ = self.create_publisher(Marker, 'visualization_marker', 10)
+        self.publisher_marker = self.create_publisher(Marker, 'visualization_marker', 10)
 
 
-        self.subscription = self.create_subscription(PoseWithCovarianceStamped,'/initialpose',self.initial_pose_callback,10, callback_group=self.parallel_group)
+        self.initial_pose_sub = self.create_subscription(PoseWithCovarianceStamped,'/initialpose',self.initial_pose_callback,10, callback_group=self.parallel_group)
 
         # Create an action client for the discovery mode
         self.discovery_action_client = DiscoveryActionClient()
@@ -453,7 +453,7 @@ class PlannerHandler(Node):
         marker.color.a = 1.0  # Transparency
         marker.color.r = 1.0  # Green color
 
-        self.publisher_.publish(marker)
+        self.publisher_marker.publish(marker)
 
     def relocate(self):
         """Relocate the robot to the ideal relocation point. The ideal relocation point is the intersection point of the robot with the circle centered in the last goal and with radius 4."""
