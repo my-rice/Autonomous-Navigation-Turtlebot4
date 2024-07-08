@@ -45,8 +45,8 @@ class Discovery(Node):
         self._bridge = cv_bridge.CvBridge()
         self._detector = QReader(model_size="n")
         self.active = True # METTI FALSE DOPO
-        self._image_sub = self.create_subscription(CompressedImage, "/oakd/rgb/preview/image_raw/compressed", self.on_imageread, 10, callback_group=self.parallel_group) # METTI PREVIEW DOPO
-        self.sign_sub = self.create_subscription(String, "/test_sign", self.on_davide, 10,callback_group=self.parallel_group)
+        self._image_sub = self.create_subscription(CompressedImage, "/oakd/rgb/preview/image_raw/compressed", self.on_image_read, 10, callback_group=self.parallel_group) # METTI PREVIEW DOPO
+        self.sign_sub = self.create_subscription(String, "/test_sign", self.on_signal_received_test, 10,callback_group=self.parallel_group)
         # ROBADIADO
 
 
@@ -63,7 +63,7 @@ class Discovery(Node):
         self.sign_sub.destroy()
         super().destroy_node()
 
-    def on_davide(self, msg):
+    def on_signal_received_test(self, msg):
         if self.active:
             self.found = True
             self.road_sign = msg.data
@@ -198,7 +198,7 @@ class Discovery(Node):
         self.get_logger().info(f"Goal handle: {goal_handle}")
         return result
 
-    def on_imageread(self, msg):
+    def on_image_read(self, msg):
         self.get_logger().info("Callback image read")
         if self.active and not self.found:
             self.get_logger().info("Image received")
