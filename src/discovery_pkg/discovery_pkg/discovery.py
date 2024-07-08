@@ -230,7 +230,7 @@ def main(args=None):
     try:
         executor.spin()
     except KeyboardInterrupt:
-        discovery_node.get_logger().info("Keyboard Interrupt (SIGINT) COglione")
+        discovery_node.get_logger().info("Keyboard Interrupt (SIGINT)")
     except Exception:
         discovery_node.get_logger().info("Exception")
     discovery_node.destroy_node()
