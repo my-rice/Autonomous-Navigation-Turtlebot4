@@ -1,8 +1,7 @@
 from setuptools import find_packages, setup
 from glob import glob
 import os
-
-package_name = 'discovery_pkg'
+package_name = 'config_pkg'
 
 setup(
     name=package_name,
@@ -12,9 +11,9 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
-        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
-
+        (os.path.join('share', package_name, 'map'), glob(os.path.join('map', '*.yaml'))),
+        (os.path.join('share', package_name, 'map'), glob(os.path.join('map', '*.pgm'))),
+        (os.path.join('share', package_name, 'params'), glob('params/*.yaml')),
 
 
     ],
@@ -23,11 +22,11 @@ setup(
     maintainer='giovanni',
     maintainer_email='g.intonti@studenti.unisa.it',
     description='TODO: Package description',
-    license='Apache-2.0',
+    license='TODO: License declaration',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'discovery = discovery_pkg.discovery:main'
+            'nessun_nodo = config_pkg.nessun_nodo:main'
         ],
     },
 )

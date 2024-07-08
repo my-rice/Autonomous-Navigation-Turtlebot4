@@ -9,18 +9,21 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.actions import DeclareLaunchArgument
 
 def generate_launch_description():
-   
+    
+    map_path = PathJoinSubstitution([FindPackageShare('config_pkg'), 'map', 'diem_map_clean.yaml'])
+    
     Localization_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             FindPackageShare("turtlebot4_navigation"), '/launch', '/localization.launch.py']),
-        launch_arguments={'map': 'src/map/diem_map_clean.yaml'}.items()
+        launch_arguments={'map': map_path}.items()
     )
 
-   
+    params_file = PathJoinSubstitution([FindPackageShare('config_pkg'), 'params', 'nav2_params.yaml'])
+
     Navigation_node = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             FindPackageShare("turtlebot4_navigation"), '/launch', '/nav2.launch.py']),
-        launch_arguments={'params_file': 'src/config_mobile_robots/nav2_params.yaml'}.items()
+        launch_arguments={'params_file': params_file}.items()
     )
 
  
