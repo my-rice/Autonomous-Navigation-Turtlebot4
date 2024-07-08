@@ -31,7 +31,11 @@ class Discovery(Node):
             callback_group=self.mutual_exclusion_group)
         self.get_logger().info("Action Server 'discovery_mode' is ready")
         self.navigator = TurtleBot4Navigator()
-        self.read_parameters(config_path)
+
+        self.declare_parameter('config_file', '')
+        self.config_path = self.get_parameter('config_file').get_parameter_value().string_value
+        
+        self.read_parameters(self.config_path)
         self.found = False
         self.road_sign = None
         self.amcl_pose = None
