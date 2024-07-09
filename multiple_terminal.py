@@ -41,6 +41,6 @@ for i,cmd in enumerate(commands):
     subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', f'echo -e "\033[32mLaunching command: {cmd}\033[0m"; {cmd}; exec bash'])
     
     if i==0:
-        time.sleep(2) 
+        time.sleep(3) 
     else:
-        time.sleep(1)
+        time.sleep(2)
