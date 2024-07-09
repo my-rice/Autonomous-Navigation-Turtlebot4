@@ -26,6 +26,5 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        Discovery_node,
         Planner_node,
     ])

@@ -26,22 +26,21 @@
 import subprocess
 import time
 
-subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', 'colcon build;'])
-time.sleep(20)
+subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', 'colcon clean workspace -y; colcon build;'])
+time.sleep(9)
 
 commands = [ 
-    #'source install/setup.bash && ros2 launch diem_gazebo turtlebot4_ignition_no_dock.launch.py use_sim_time:=true',#x:=-6.3 y:=0.0 world:=diem_map',
-    'source install/setup.bash && ros2 launch turtlebot4_navigation localization.launch.py map:=src/map/diem_map_clean.yaml',
-    'source install/setup.bash && ros2 launch turtlebot4_navigation nav2.launch.py params_file:=src/config_mobile_robots/nav2_params.yaml',
-    'source install/setup.bash && ros2 launch planner_pkg robot_launch.py',
-    'source install/setup.bash && ros2 run discovery_pkg discovery', 
-    'source install/setup.bash && ros2 launch planner_pkg planner_launch.py'
+    'source install/setup.bash && ros2 launch diem_gazebo turtlebot4_ignition_no_dock.launch.py use_sim_time:=true',#x:=-6.3 y:=0.0 world:=diem_map',
+    'source install/setup.bash && ros2 launch planner_pkg startup_launch.py',
+    'source install/setup.bash && ros2 launch discovery_pkg discovery_launch.py',
+    'source install/setup.bash && ros2 launch planner_pkg planner_launch.py',
+
 ]
 
 for i,cmd in enumerate(commands):
     subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', f'echo -e "\033[32mLaunching command: {cmd}\033[0m"; {cmd}; exec bash'])
     
     if i==0:
-        time.sleep(15) 
+        time.sleep(2) 
     else:
-        time.sleep(15)
+        time.sleep(1)
