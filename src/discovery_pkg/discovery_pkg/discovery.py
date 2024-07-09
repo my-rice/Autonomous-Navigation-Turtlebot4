@@ -17,7 +17,7 @@ from std_msgs.msg import String
 
 
 class Discovery(Node):
-    def __init__(self, node_name, config_path=None, **kwargs):
+    def __init__(self, node_name, **kwargs):
         super().__init__(node_name, **kwargs)
         self.mutual_exclusion_group = MutuallyExclusiveCallbackGroup()
 
@@ -41,18 +41,16 @@ class Discovery(Node):
         self.amcl_pose = None
         self.parallel_group = MutuallyExclusiveCallbackGroup()
         self.is_navigating = False
-        # ROBADIADO
+
         self._bridge = cv_bridge.CvBridge()
         self._detector = QReader(model_size="n")
-        self.active = True # METTI FALSE DOPO
-        self._image_sub = self.create_subscription(CompressedImage, "/oakd/rgb/preview/image_raw/compressed", self.on_image_read, 10, callback_group=self.parallel_group) # METTI PREVIEW DOPO
+        self.active = False 
+        self._image_sub = self.create_subscription(CompressedImage, "/oakd/rgb/preview/image_raw/compressed", self.on_image_read, 10, callback_group=self.parallel_group) 
         self.sign_sub = self.create_subscription(String, "/test_sign", self.on_signal_received_test, 10,callback_group=self.parallel_group)
-        # ROBADIADO
 
 
         self.mutex = threading.Lock()
         self.mutex_sign = threading.Lock()
-        # self.timer = self.create_timer(0.5, self.run)
 
         self.get_logger().info("Subscribed to topics")
 
@@ -64,6 +62,7 @@ class Discovery(Node):
         super().destroy_node()
 
     def on_signal_received_test(self, msg):
+        self.get_logger().info("Callback signal received")
         if self.active:
             self.found = True
             self.road_sign = msg.data
