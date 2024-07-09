@@ -689,7 +689,7 @@ class PlannerHandler(Node):
         self.get_logger().info("The robot in on_stop")
         raise ExitException("The robot has reached the final goal")
 
-    def plot_point_on_rviz(self, ideal_relocation, angle):
+    def plot_arrow_on_rviz(self, ideal_relocation, angle):
         # Calculate endpoint of the arrow based on angle
         self.get_logger().info("Plotting the point on rviz")
         arrow_length = 1.0  # Length of the arrow (adjust as needed)
@@ -735,10 +735,10 @@ class PlannerHandler(Node):
 
         if self.first_discovery:
             self.navigator.setInitialPose(self.navigator.getPoseStamped(self.last_nav_goal[0:2], self.last_nav_goal[2]))
-            self.plot_point_on_rviz(self.last_nav_goal[0:2], self.last_nav_goal[2])
+            self.plot_arrow_on_rviz(self.last_nav_goal[0:2], self.last_nav_goal[2])
         else:
             point,angle = self.relocate()
-            self.plot_point_on_rviz(point,angle)
+            self.plot_arrow_on_rviz(point,angle)
 
 
         # wait for the kidnapped status to be False
