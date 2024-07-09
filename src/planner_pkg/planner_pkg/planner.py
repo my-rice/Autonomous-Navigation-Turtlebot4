@@ -95,9 +95,9 @@ class DiscoveryActionClient(Node):
             # Cancel the goal
             future = self._goal_handle.cancel_goal_async()
             future.add_done_callback(self.cancel_done)
+            
+            #return future
             self.get_logger().info('Goal canceled')
-
-
 
     def cancel_done(self, future):
         """Callback function for the cancel response."""
@@ -196,15 +196,6 @@ class PlannerHandler(Node):
             rclpy.shutdown() #TODO: raise exception and exit
             exit()
 
-
-
-
-
-
-
-
-        self.state_mutex = threading.Lock()
-        self.kidnap_mutex = threading.Lock()
         # Start the timer for the planner that will run the main loop
         self.get_logger().info("self.timer_period: " + str(self.timer_period))
         self.timer = self.create_timer(timer_period_sec=self.timer_period, callback=self.run, callback_group=self.timer_mutual_exclusion_group)
@@ -228,6 +219,8 @@ class PlannerHandler(Node):
         points = self.order_by_distance(intersection_points, x, y)
         self.action_payload = (points[1][0],points[1][1],angle)
         self.nav_goal = (points[0][0], points[0][1], angle)
+
+        self.last_nav_goal = pose
 
 
     def read_parameters(self):
@@ -381,8 +374,19 @@ class PlannerHandler(Node):
         goal_handle = future_goal.result()
         get_result_future = goal_handle.get_result_async()
         self.get_logger().info("Waiting" + str(get_result_future))
-        while not get_result_future.done() and not get_result_future.cancelled():
+
+        recovery_flag = False
+
+        while not get_result_future.done() and not get_result_future.cancelled(): #and not recovery_flag:
             #self.get_logger().info("done: " + str(get_result_future.done()) + " cancelled: " + str(get_result_future.cancelled()))
+            
+            if self.is_kidnapped:
+                # cancel the current goal
+                self.get_logger().info("The robot is kidnapped, canceling the current goal")
+                if recovery_flag == False:
+                    self.discovery_action_client.cancel_goal()
+                recovery_flag = True
+            
             self.get_logger().info("Waiting for the result:")
             rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
 
@@ -713,16 +717,19 @@ class PlannerHandler(Node):
     def on_recovery(self):
         self.get_logger().info("The robot is on_recovery")
         
+
+        if self.first_discovery:
+            self.navigator.setInitialPose(self.navigator.getPoseStamped(self.last_nav_goal[0:2], self.last_nav_goal[2]))
+        else:
+            self.relocate()
+
+
         # wait for the kidnapped status to be False
         while self.is_kidnapped:
             self.get_logger().info("The robot is in kidnapped mode, waiting for the robot to be deployed")
             #rclpy.spin_once(self, timeout_sec=1)
             time.sleep(1)
         
-
-
-        self.relocate()
-
         self.get_logger().info("The robot has been relocated, the next goal is: " + str(self.next_goal) + " and the last goal is: " + str(self.nav_goal))
         if self.first_discovery:
             self.state = States.FIRST_LOCALIZATION
