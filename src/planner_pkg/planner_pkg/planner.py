@@ -159,6 +159,47 @@ class PlannerHandler(Node):
         self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
         
 
+
+        self.get_logger().info("The robot is on_startup")
+        self.amcl_pose = None
+        self.navigator = TurtleBot4Navigator()
+        self.initial_pose_flag = False
+        self.first_discovery = True
+        self.is_kidnapped = False
+        self.last_goal = None
+        self.last_nav_goal = None
+        self.next_goal = None
+        self.nav_goal = None
+        self.result = None
+        self.last_kidnapped = False
+        self.discovery_flag = False
+
+        # Build the map used by the planner to compute the next goal
+        self.build_p_map()
+
+        while self.initial_pose_flag == False: # TODO: Is it necessary to wait for the initial pose? In this way?
+            self.get_logger().info("Please, set the initial pose ...")
+            rclpy.spin_once(self, timeout_sec=1)
+
+        # Wait until the navigation2 is active
+        self.navigator.waitUntilNav2Active()
+        self.navigator.clearAllCostmaps()
+
+        # Wait until the action server is ready
+        if(self.discovery_action_client.wait_for_server(self.timeout)):
+            self.get_logger().info("Action server is ready")
+        else:
+            self.get_logger().info("Action server is not ready, shutting down...")
+            rclpy.shutdown() #TODO: raise exception and exit
+            exit()
+
+
+
+
+
+
+
+
         self.state_mutex = threading.Lock()
         self.kidnap_mutex = threading.Lock()
         # Start the timer for the planner that will run the main loop
@@ -522,41 +563,9 @@ class PlannerHandler(Node):
     # def start_navigation(self, x, y, angle=0):
     #     self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
 
-    def on_sturtup(self):
+    def on_startup(self):
         # Initialize the variables for the planner used in the run method
         self.get_logger().info("The robot is on_startup")
-        self.amcl_pose = None
-        self.navigator = TurtleBot4Navigator()
-        self.initial_pose_flag = False
-        self.first_discovery = True
-        self.is_kidnapped = False
-        self.last_goal = None
-        self.last_nav_goal = None
-        self.next_goal = None
-        self.nav_goal = None
-        self.result = None
-        self.last_kidnapped = False
-        self.discovery_flag = False
-
-        # Build the map used by the planner to compute the next goal
-        self.build_p_map()
-
-        while self.initial_pose_flag == False: # TODO: Is it necessary to wait for the initial pose? In this way?
-            self.get_logger().info("Please, set the initial pose ...")
-            rclpy.spin_once(self, timeout_sec=1)
-
-        # Wait until the navigation2 is active
-        self.navigator.waitUntilNav2Active()
-        self.navigator.clearAllCostmaps()
-
-        # Wait until the action server is ready
-        if(self.discovery_action_client.wait_for_server(self.timeout)):
-            self.get_logger().info("Action server is ready")
-        else:
-            self.get_logger().info("Action server is not ready, shutting down...")
-            rclpy.shutdown() #TODO: raise exception and exit
-            exit()
-
         self.init_planner_internal_state()
         
         self.state = States.FIRST_LOCALIZATION
@@ -719,7 +728,7 @@ class PlannerHandler(Node):
         self.get_logger().info("The robot is in the state: " + str(self.state))
 
         if self.state == States.STARTUP:
-            self.on_sturtup()
+            self.on_startup()
         elif self.state == States.FIRST_LOCALIZATION:
             self.on_first_localization()
         elif self.state == States.FIRST_NAVIGATION:

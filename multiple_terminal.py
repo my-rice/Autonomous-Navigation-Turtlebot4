@@ -26,11 +26,11 @@
 import subprocess
 import time
 
-subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', 'colcon clean workspace -y; colcon build;'])
-time.sleep(9)
+subprocess.Popen(['gnome-terminal', '--', 'bash', '-c', 'colcon build;'])
+time.sleep(5)
 
 commands = [ 
-    'source install/setup.bash && ros2 launch diem_gazebo turtlebot4_ignition_no_dock.launch.py use_sim_time:=true',#x:=-6.3 y:=0.0 world:=diem_map',
+    'source install/setup.bash && ros2 launch diem_gazebo turtlebot4_ignition_no_dock.launch.py',#x:=-6.3 y:=0.0 world:=diem_map',
     'source install/setup.bash && ros2 launch planner_pkg startup_launch.py',
     'source install/setup.bash && ros2 launch discovery_pkg discovery_launch.py',
     'source install/setup.bash && ros2 launch planner_pkg planner_launch.py',
