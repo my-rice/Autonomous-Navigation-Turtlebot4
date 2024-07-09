@@ -18,7 +18,7 @@ import random
 
 import threading
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
-
+from geometry_msgs.msg import Point
 
 from enum import Enum
 
@@ -252,24 +252,24 @@ class PlannerHandler(Node):
             self.navigator.setInitialPose(initial_pose)
             self.get_logger().info('Initial pose received: {0} {1} {2}'.format(msg.pose.pose.position.x, msg.pose.pose.position.y, angle))
 
-    # def kidnapped_callback(self, msg):
-    #     """Callback function for the kidnapped topic. It updates the kidnapped status of the robot, and it handles the kidnapped mode. This is a part of the recovery mode."""
-    #     # self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
-    #     if msg.is_kidnapped == True and self.last_kidnapped == False:
-    #         # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
-    #         self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
-    #         self.is_kidnapped = msg.is_kidnapped
-    #         self.abort() # abort the current goal
-    #         self.get_logger().info("ABORTED 2")
-    #         self.plot_point_on_rviz()
+    def kidnapped_callback(self, msg):
+        """Callback function for the kidnapped topic. It updates the kidnapped status of the robot, and it handles the kidnapped mode. This is a part of the recovery mode."""
+        # self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
+        if msg.is_kidnapped == True and self.last_kidnapped == False:
+            # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
+            self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
+            self.is_kidnapped = msg.is_kidnapped
+            # self.abort() # abort the current goal
+            # self.get_logger().info("ABORTED 2")
+            # self.plot_point_on_rviz()
 
-    #     if msg.is_kidnapped == False and self.last_kidnapped == True:
-    #         self.get_logger().info("The robot is deployed")
-    #         self.relocate()     
-    #         self.is_kidnapped = msg.is_kidnapped # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
-    #         self.timer.reset()
+        if msg.is_kidnapped == False and self.last_kidnapped == True:
+            self.get_logger().info("The robot is deployed")
+            # self.relocate()     
+            self.is_kidnapped = msg.is_kidnapped # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
+            # self.timer.reset()
         
-    #     self.last_kidnapped = self.is_kidnapped
+        self.last_kidnapped = self.is_kidnapped
 
     def kidnapped_test_callback(self, msg):
         """Callback function that behave the same as kidnapped_callback. It is used only for testing in simulation."""
@@ -449,31 +449,6 @@ class PlannerHandler(Node):
         theta = yaw * 180 / 3.14159265359
         return theta
     
-    def plot_point_on_rviz(self):
-        """Plot the ideal relocation point on rviz."""
-        self.get_logger().info("Plotting the ideal relocation point on rviz, the last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal))
-        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], self.rho+1)
-        points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
-        ideal_relocation = points[0]
-        self.get_logger().info("I am relocating at ideal_relocation: " + str(ideal_relocation))
-
-        marker = Marker()
-        marker.header.frame_id = "map"
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = "center_point"
-        marker.type = Marker.SPHERE
-        marker.action = Marker.ADD
-        marker.pose.position.x = ideal_relocation[0]
-        marker.pose.position.y = ideal_relocation[1]
-        marker.pose.position.z = 0.0
-        marker.pose.orientation.w = 1.0
-        marker.scale.x = 0.2  # Sphere diameter
-        marker.scale.y = 0.2
-        marker.scale.z = 0.2
-        marker.color.a = 1.0  # Transparency
-        marker.color.r = 1.0  # Green color
-
-        self.publisher_marker.publish(marker)
 
     def relocate(self):
         """Relocate the robot to the ideal relocation point. The ideal relocation point is the intersection point of the robot with the circle centered in the last goal and with radius 4."""
@@ -490,6 +465,7 @@ class PlannerHandler(Node):
         self.get_logger().info("The ideal relocation is: " + str(ideal_relocation))
         self.next_goal = self.last_goal
         self.nav_goal = self.last_nav_goal
+        return ideal_relocation, angle
         
 
     # def abort(self):
@@ -713,6 +689,45 @@ class PlannerHandler(Node):
         self.get_logger().info("The robot in on_stop")
         raise ExitException("The robot has reached the final goal")
 
+    def plot_point_on_rviz(self, ideal_relocation, angle):
+        # Calculate endpoint of the arrow based on angle
+        self.get_logger().info("Plotting the point on rviz")
+        arrow_length = 1.0  # Length of the arrow (adjust as needed)
+        end_point = Point()
+        end_point.x = ideal_relocation[0] + arrow_length * math.cos(math.radians(angle))
+        end_point.y = ideal_relocation[1] + arrow_length * math.sin(math.radians(angle))
+        end_point.z = 0.0
+
+        # Create a Marker for the arrow
+        arrow_marker = Marker()
+        arrow_marker.header.frame_id = "map"
+        arrow_marker.header.stamp = self.get_clock().now().to_msg()
+        arrow_marker.ns = "relocation_arrow"
+        arrow_marker.type = Marker.ARROW
+        arrow_marker.action = Marker.ADD
+
+        # Set the position and orientation of the arrow
+        start_point = Point()
+        start_point.x = ideal_relocation[0]
+        start_point.y = ideal_relocation[1]
+        start_point.z = 0.0
+
+        arrow_marker.points = [start_point, end_point]
+
+        # Set the scale of the arrow (shaft diameter, head diameter, head length)
+        arrow_marker.scale.x = 0.05  # Shaft diameter
+        arrow_marker.scale.y = 0.1   # Head diameter
+        arrow_marker.scale.z = 0.1   # Head length
+
+        # Set the color of the arrow
+        arrow_marker.color.a = 1.0  # Transparency
+        arrow_marker.color.r = 1.0  # Red color
+        arrow_marker.color.g = 0.0  # Green color
+        arrow_marker.color.b = 0.0  # Blue color
+
+        # Publish the arrow marker
+        self.publisher_marker.publish(arrow_marker)
+
 
     def on_recovery(self):
         self.get_logger().info("The robot is on_recovery")
@@ -720,8 +735,10 @@ class PlannerHandler(Node):
 
         if self.first_discovery:
             self.navigator.setInitialPose(self.navigator.getPoseStamped(self.last_nav_goal[0:2], self.last_nav_goal[2]))
+            self.plot_point_on_rviz(self.last_nav_goal[0:2], self.last_nav_goal[2])
         else:
-            self.relocate()
+            point,angle = self.relocate()
+            self.plot_point_on_rviz(point,angle)
 
 
         # wait for the kidnapped status to be False
@@ -794,7 +811,7 @@ def main(args=None):
     except ExitException as e:
         planner.get_logger().info("The robot has reached the final goal")
     finally:
-        planner.get_logger().info("Sei sicuro?")
+        planner.get_logger().info("The planner is shutting down")
     
     planner.destroy_node()
     rclpy.shutdown()
