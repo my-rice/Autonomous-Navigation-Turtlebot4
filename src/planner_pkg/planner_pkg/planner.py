@@ -22,6 +22,9 @@ from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallb
 
 from enum import Enum
 
+import time
+
+
 # create enun for states
 class States(Enum):
     STARTUP = 0
@@ -277,7 +280,7 @@ class PlannerHandler(Node):
 
     def kidnapped_test_callback(self, msg):
         """Callback function that behave the same as kidnapped_callback. It is used only for testing in simulation."""
-        # self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
+        self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
         if msg.data == True and self.last_kidnapped == False:
             # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
             self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))            
@@ -713,11 +716,14 @@ class PlannerHandler(Node):
         # wait for the kidnapped status to be False
         while self.is_kidnapped:
             self.get_logger().info("The robot is in kidnapped mode, waiting for the robot to be deployed")
-            rclpy.spin_once(self, timeout_sec=1)
+            #rclpy.spin_once(self, timeout_sec=1)
+            time.sleep(1)
         
 
 
         self.relocate()
+
+        self.get_logger().info("The robot has been relocated, the next goal is: " + str(self.next_goal) + " and the last goal is: " + str(self.nav_goal))
         if self.first_discovery:
             self.state = States.FIRST_LOCALIZATION
         else:
@@ -745,7 +751,7 @@ class PlannerHandler(Node):
             # Handle unknown state
             raise ValueError("Unknown state: " + str(self.state))
         
-        self.get_logger().info("run method completed")
+        #self.get_logger().info("run method completed")
                 
 
 
