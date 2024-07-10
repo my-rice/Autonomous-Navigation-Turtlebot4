@@ -56,6 +56,9 @@ class DiscoveryActionClient(Node):
         self._goal_handle = None
         self.action_client = ActionClient(self, DiscoveryAction, 'discovery_mode')
 
+    def destroy(self):
+        self.action_client.destroy()
+        
     def send_goal(self,goal_pose_x, goal_pose_y, start_pose_x, start_pose_y, angle):
         """" Implement the send_goal method. It prepares the goal message with the starting pose and the goal pose of the discovery and sends it to the action server."""
         goal_msg = DiscoveryAction.Goal()
