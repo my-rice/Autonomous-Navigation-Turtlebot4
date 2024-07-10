@@ -751,9 +751,12 @@ class PlannerHandler(Node):
             time.sleep(1)
         
         self.get_logger().info("The robot has been relocated, the next goal is: " + str(self.next_goal) + " and the last goal is: " + str(self.nav_goal))
+        
         if self.first_discovery:
+            self.navigator.setInitialPose(self.navigator.getPoseStamped(self.last_nav_goal[0:2], self.last_nav_goal[2]))
             self.state = States.FIRST_LOCALIZATION
         else:
+            self.relocate()
             self.state = States.NAVIGATION
 
     def run(self):
