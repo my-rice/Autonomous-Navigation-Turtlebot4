@@ -15,11 +15,12 @@ class CircleMarkerPublisher(Node):
         self.angle_resolution = 0.1  # radians
         self.large_radius = 3.0  # meters
         self.small_radius = 1.0  # meters
-        self.load_config()
+        self.declare_parameter('config_file', '')
+        self.config_path = self.get_parameter('config_file').get_parameter_value().string_value
+        self.load_config(self.config_path)
 
-    def load_config(self):
+    def load_config(self, config_file):
         # Load the configuration file
-        config_file = '/home/giovanni/Desktop/Mobile_Robots-1/src/findtuning_pkg/config.yaml'
         with open(config_file, 'r') as file:
             self.config = yaml.safe_load(file)
         self.coordinates = [self.convert_to_float(node['coordinates']) for node in self.config['map']['nodes'].values()]
