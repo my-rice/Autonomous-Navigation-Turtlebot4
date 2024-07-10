@@ -79,8 +79,8 @@ class Discovery(Node):
             if self.is_navigating:
                 self.get_logger().info('Cancelling navigation thread')
                 self.navigator.cancelTask()
-                self.road_sign = "Canceled"
-                self.found = True
+            self.road_sign = "Canceled"
+            self.found = True
             
 
         return CancelResponse.ACCEPT
