@@ -159,10 +159,10 @@ class PlannerHandler(Node):
         self.state = States.STARTUP
 
         # Create a subscription to the kidnapped topic only after the initial pose has been set
-        self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
+        #self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
 
         # TOPIC FOR TESTING IN SIMULATION: to test the recovery mode, we need to kidnap the robot
-        # self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
+        self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
         
 
 
@@ -454,12 +454,12 @@ class PlannerHandler(Node):
     
 
     def relocate(self):
-        """Relocate the robot to the ideal relocation point. The ideal relocation point is the intersection point of the robot with the circle centered in the last goal and with radius 4."""
+        """Relocate the robot to the ideal relocation point. The ideal relocation point is the intersection point of the robot with the circle centered in the last goal and with radius augmented by one."""
         self.get_logger().info("Relocating the robot")
         ### Get the ideal relocation pose of the robot
 
         self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
-        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], rho=4)
+        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], rho=self.rho+1)
         points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
         ideal_relocation = points[0]
         self.action_payload = (points[1][0],points[1][1],angle) # the action payload is the last point of the crossing where the robot has to search for the traffic sign
