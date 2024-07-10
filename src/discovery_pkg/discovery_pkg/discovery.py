@@ -74,36 +74,36 @@ class Discovery(Node):
             self.navigator.cancelTask()
             self.get_logger().info(msg.data)
 
-    def plot_point_on_rviz(self,test_points):
-        """Plot the ideal relocation point on rviz."""
-        marker = self.marker
-        marker.header.frame_id = "map"
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = "test_points"
-        marker.type = Marker.POINTS  # Change marker type to POINTS
-        marker.action = Marker.ADD
+    # def plot_point_on_rviz(self,test_points):
+    #     """Plot the ideal relocation point on rviz."""
+    #     marker = self.marker
+    #     marker.header.frame_id = "map"
+    #     marker.header.stamp = self.get_clock().now().to_msg()
+    #     marker.ns = "test_points"
+    #     marker.type = Marker.POINTS  # Change marker type to POINTS
+    #     marker.action = Marker.ADD
 
-        points = []
-        for point in test_points:
-            p = Point()
-            p.x = point[0]
-            p.y = point[1]
-            self.get_logger().info(f"Point: {p.x}, {p.y}")
-            p.z = 0.0
-            points.append(p)
+    #     points = []
+    #     for point in test_points:
+    #         p = Point()
+    #         p.x = point[0]
+    #         p.y = point[1]
+    #         self.get_logger().info(f"Point: {p.x}, {p.y}")
+    #         p.z = 0.0
+    #         points.append(p)
 
-        marker.points = points
+    #     marker.points = points
 
-        marker.scale.x = 0.2  # Point width
-        marker.scale.y = 0.2  # Point height
+    #     marker.scale.x = 0.2  # Point width
+    #     marker.scale.y = 0.2  # Point height
 
-        # Set color for the points
-        marker.color.a = 1.0  # Transparency
-        marker.color.r = 1.0  # Red color
-        marker.color.g = 0.0  # Green color
-        marker.color.b = 0.0  # Blue color
+    #     # Set color for the points
+    #     marker.color.a = 1.0  # Transparency
+    #     marker.color.r = 1.0  # Red color
+    #     marker.color.g = 0.0  # Green color
+    #     marker.color.b = 0.0  # Blue color
 
-        self.publisher_marker.publish(marker)
+    #     self.publisher_marker.publish(marker)
 
 
     def goal_callback(self, goal_request):
@@ -140,7 +140,7 @@ class Discovery(Node):
         points = [(start_x + increment_x * i, start_y + increment_y * i, angle) for i in range(1, n_points)]
 
         
-        self.plot_point_on_rviz(points)
+        # self.plot_point_on_rviz(points)
 
         return points
 
