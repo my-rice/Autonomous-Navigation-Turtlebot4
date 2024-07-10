@@ -156,10 +156,10 @@ class PlannerHandler(Node):
         self.state = States.STARTUP
 
         # Create a subscription to the kidnapped topic only after the initial pose has been set
-        #self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
+        self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
 
         # TOPIC FOR TESTING IN SIMULATION: to test the recovery mode, we need to kidnap the robot
-        self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
+        # self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
         
 
 
