@@ -1,4 +1,4 @@
 policy:
-  array_based: true
-  n_points: 4
+  n_points: 5
   spin_dist: 22.5
+  decrease_spin_dist: 2

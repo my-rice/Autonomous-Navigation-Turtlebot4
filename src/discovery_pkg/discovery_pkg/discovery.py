@@ -53,6 +53,7 @@ class Discovery(Node):
 
         self.mutex = threading.Lock()
         self.mutex_sign = threading.Lock()
+        self.decrease_spin_dist = 0
 
         self.publisher_marker = self.create_publisher(Marker, 'visualization_marker', 10)
         self.marker = Marker()
@@ -78,14 +79,13 @@ class Discovery(Node):
         marker = self.marker
         marker.header.frame_id = "map"
         marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = "center_point"
-        marker.type = Marker.SPHERE
+        marker.ns = "test_points"
+        marker.type = Marker.POINTS  # Change marker type to POINTS
         marker.action = Marker.ADD
 
         points = []
         for point in test_points:
             p = Point()
-
             p.x = point[0]
             p.y = point[1]
             self.get_logger().info(f"Point: {p.x}, {p.y}")
@@ -94,12 +94,14 @@ class Discovery(Node):
 
         marker.points = points
 
-        marker.scale.x = 0.2  # Sphere diameter
-        marker.scale.y = 0.2
-        marker.scale.z = 0.2
-        marker.color.a = 1.0  # Transparency
-        marker.color.r = 1.0  # Green color
+        marker.scale.x = 0.2  # Point width
+        marker.scale.y = 0.2  # Point height
 
+        # Set color for the points
+        marker.color.a = 1.0  # Transparency
+        marker.color.r = 1.0  # Red color
+        marker.color.g = 0.0  # Green color
+        marker.color.b = 0.0  # Blue color
 
         self.publisher_marker.publish(marker)
 
@@ -127,12 +129,12 @@ class Discovery(Node):
         with open(config_path, 'r') as file:
             config = yaml.safe_load(file)
 
-        self.policy = config['policy']['array_based']
         self.n_points = config['policy']['n_points']
         self.spin_dist = config['policy']['spin_dist']
+        self.decrease_spin_dist = config['policy']['decrease_spin_dist']
 
     def policy_straight(self, goal_x, goal_y, angle, start_x, start_y, n_points=4):
-        #r = math.sqrt((goal_x - start_x)**2 + (goal_y - start_y)**2)
+        
         increment_x = (goal_x - start_x) / n_points
         increment_y = (goal_y - start_y) / n_points
         points = [(start_x + increment_x * i, start_y + increment_y * i, angle) for i in range(1, n_points)]
@@ -172,7 +174,7 @@ class Discovery(Node):
                     self.get_logger().info(f"Error: {e}")
                     self.road_sign = "Error"
                     return
-            actual_spin_dist -= 5
+            actual_spin_dist -= self.decrease_spin_dist
             if num_point != len(points)-1:
                 try:
                     with self.mutex:
