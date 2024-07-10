@@ -88,8 +88,9 @@ class Discovery(Node):
 
             p.x = point[0]
             p.y = point[1]
+            self.get_logger().info(f"Point: {p.x}, {p.y}")
             p.z = 0.0
-            points.append(point)
+            points.append(p)
 
         marker.points = points
 
@@ -98,6 +99,7 @@ class Discovery(Node):
         marker.scale.z = 0.2
         marker.color.a = 1.0  # Transparency
         marker.color.r = 1.0  # Green color
+
 
         self.publisher_marker.publish(marker)
 
@@ -151,17 +153,17 @@ class Discovery(Node):
             self.get_logger().info(f"Point: {point}")
             for i in [-1, 2, -1]:
                 try:
-                    # with self.mutex:
-                    #     self.get_logger().info("Primo spin")
-                    #     self.navigator.spin(spin_dist=math.radians(actual_spin_dist * i))
-                    #     self.is_navigating = True
-                    # self.get_logger().info("Primo while")
-                    # while not self.navigator.isTaskComplete():
-                    #     self.get_logger().info("Waiting for spin task completion 1")
-                    #     # rclpy.spin_once(self, timeout_sec=0.1)
-                    # self.is_navigating = False
+                    with self.mutex:
+                        self.get_logger().info("Primo spin")
+                        self.navigator.spin(spin_dist=math.radians(actual_spin_dist * i))
+                        self.is_navigating = True
+                    self.get_logger().info("Primo while")
+                    while not self.navigator.isTaskComplete():
+                        self.get_logger().info("Waiting for spin task completion 1")
+                        # rclpy.spin_once(self, timeout_sec=0.1)
+                    self.is_navigating = False
                     
-                    # time.sleep(1)
+                    time.sleep(1)
                     with self.mutex_sign:
                         if self.found:
                             self.get_logger().info(f"Found road sign: {self.road_sign}")
