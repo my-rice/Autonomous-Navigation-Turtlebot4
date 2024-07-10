@@ -14,6 +14,8 @@ from sensor_msgs.msg import CompressedImage
 from discovery_pkg.qreader import QReader
 from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from std_msgs.msg import String
+from visualization_msgs.msg import Marker
+from geometry_msgs.msg import Point
 
 
 class Discovery(Node):
@@ -52,6 +54,8 @@ class Discovery(Node):
         self.mutex = threading.Lock()
         self.mutex_sign = threading.Lock()
 
+        self.publisher_marker = self.create_publisher(Marker, 'visualization_marker', 10)
+        self.marker = Marker()
         self.get_logger().info("Subscribed to topics")
 
     def destroy_node(self):
@@ -68,6 +72,35 @@ class Discovery(Node):
             self.road_sign = msg.data
             self.navigator.cancelTask()
             self.get_logger().info(msg.data)
+
+    def plot_point_on_rviz(self,test_points):
+        """Plot the ideal relocation point on rviz."""
+        marker = self.marker
+        marker.header.frame_id = "map"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "center_point"
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+
+        points = []
+        for point in test_points:
+            p = Point()
+
+            p.x = point[0]
+            p.y = point[1]
+            p.z = 0.0
+            points.append(point)
+
+        marker.points = points
+
+        marker.scale.x = 0.2  # Sphere diameter
+        marker.scale.y = 0.2
+        marker.scale.z = 0.2
+        marker.color.a = 1.0  # Transparency
+        marker.color.r = 1.0  # Green color
+
+        self.publisher_marker.publish(marker)
+
 
     def goal_callback(self, goal_request):
         self.get_logger().info('Received goal request')
@@ -97,34 +130,38 @@ class Discovery(Node):
         self.spin_dist = config['policy']['spin_dist']
 
     def policy_straight(self, goal_x, goal_y, angle, start_x, start_y, n_points=4):
-        r = math.sqrt((goal_x - start_x)**2 + (goal_y - start_y)**2)
+        #r = math.sqrt((goal_x - start_x)**2 + (goal_y - start_y)**2)
         increment_x = (goal_x - start_x) / n_points
         increment_y = (goal_y - start_y) / n_points
         points = [(start_x + increment_x * i, start_y + increment_y * i, angle) for i in range(1, n_points)]
+
+        
+        self.plot_point_on_rviz(points)
+
         return points
 
     def start_navigation(self, goal_x, goal_y, angle, start_x, start_y, n_points, spin_dist):
         actual_spin_dist = spin_dist
         self.get_logger().info(f"Starting navigation to {goal_x}, {goal_y} with angle {angle} from {start_x}, {start_y}")
         points = self.policy_straight(goal_x, goal_y, angle, start_x, start_y, n_points)
-        for point in points:
+        for num_point,point in enumerate(points):
             with self.mutex_sign:
                 if(self.found):
                     return
             self.get_logger().info(f"Point: {point}")
             for i in [-1, 2, -1]:
                 try:
-                    with self.mutex:
-                        self.get_logger().info("Primo spin")
-                        self.navigator.spin(spin_dist=math.radians(actual_spin_dist * i))
-                        self.is_navigating = True
-                    self.get_logger().info("Primo while")
-                    while not self.navigator.isTaskComplete():
-                        self.get_logger().info("Waiting for spin task completion 1")
-                        # rclpy.spin_once(self, timeout_sec=0.1)
-                    self.is_navigating = False
+                    # with self.mutex:
+                    #     self.get_logger().info("Primo spin")
+                    #     self.navigator.spin(spin_dist=math.radians(actual_spin_dist * i))
+                    #     self.is_navigating = True
+                    # self.get_logger().info("Primo while")
+                    # while not self.navigator.isTaskComplete():
+                    #     self.get_logger().info("Waiting for spin task completion 1")
+                    #     # rclpy.spin_once(self, timeout_sec=0.1)
+                    # self.is_navigating = False
                     
-                    time.sleep(1)
+                    # time.sleep(1)
                     with self.mutex_sign:
                         if self.found:
                             self.get_logger().info(f"Found road sign: {self.road_sign}")
@@ -134,22 +171,23 @@ class Discovery(Node):
                     self.road_sign = "Error"
                     return
             actual_spin_dist -= 5
-            try:
-                with self.mutex:
-                    self.navigator.goToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
-                    self.is_navigating = True
-                while not self.navigator.isTaskComplete():
-                    self.get_logger().info("Waiting for navigation task completion 2")
-                        # rclpy.spin_once(self, timeout_sec=0.1)
-                self.is_navigating = False
-                with self.mutex_sign:
-                    if self.found:
-                        self.get_logger().info(f"Found road sign: {self.road_sign}")
-                        return
-            except Exception as e:
-                self.get_logger().info(f"Error: {e}")
-                self.road_sign = "Error"
-                return
+            if num_point != len(points)-1:
+                try:
+                    with self.mutex:
+                        self.navigator.goToPose(self.navigator.getPoseStamped((point[0], point[1]), point[2]))
+                        self.is_navigating = True
+                    while not self.navigator.isTaskComplete():
+                        self.get_logger().info("Waiting for navigation task completion 2")
+                            # rclpy.spin_once(self, timeout_sec=0.1)
+                    self.is_navigating = False
+                    with self.mutex_sign:
+                        if self.found:
+                            self.get_logger().info(f"Found road sign: {self.road_sign}")
+                            return
+                except Exception as e:
+                    self.get_logger().info(f"Error: {e}")
+                    self.road_sign = "Error"
+                    return
 
         self.get_logger().info("Navigation completed successfully")
 
