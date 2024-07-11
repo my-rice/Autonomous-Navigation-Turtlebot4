@@ -8,9 +8,9 @@ Source code for the project work of Mobile Robots for Critical Missions.
 
 ## Requirements
 
-Python version: 3.10
-Python libraries for QReader: pyzbar, pytorch, qrdet, numpy
-Python software suite for QReader: zbar-tools, to install through
+Python version: 3.10 <br />
+Python libraries for QReader: pyzbar, pytorch, qrdet, numpy <br />
+Python software suite for QReader: zbar-tools, to install through 
 ```
 sudo apt-get install zbar-tools 
 ```
@@ -18,7 +18,7 @@ command.
 
 ## How to launch
 
-First of all the localization, nav2 and rviz node should be bringed up, by using the startup launch file created:
+First of all the localization, nav2 and rviz node should be brought up, by using the startup launch file created:
 ```
 ros2 launch planner_pkg startup_launch.py
 ```
