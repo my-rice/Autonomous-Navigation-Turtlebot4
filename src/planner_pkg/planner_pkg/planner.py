@@ -605,7 +605,8 @@ class PlannerHandler(Node):
         y = self.amcl_pose.pose.pose.position.y
         theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
         pose = (x, y, theta)
-        distance_to_goal = (self.next_goal[0] - x) ** 2 + (self.next_goal[1] - y) ** 2
+        distance_to_goal = math.sqrt((self.next_goal[0] - x) ** 2 + (self.next_goal[1] - y) ** 2)
+        self.get_logger().info("The distance to the goal is: " + str(distance_to_goal) + "and x is: " + str(x) + " and y is: " + str(y) + " and the goal is: " + str(self.next_goal))
         if distance_to_goal > self.rho:
             # if the robot is too far from the goal, then we need to approach the goal
             self.state = States.FIRST_NAVIGATION

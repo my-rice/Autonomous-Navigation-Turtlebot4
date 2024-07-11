@@ -218,7 +218,6 @@ class Discovery(Node):
             return result
 
         if self.road_sign is None:
-            self.active = True
             increment_x = (goal.goal_pose_x - goal.start_pose_x)
             increment_y = (goal.goal_pose_y - goal.start_pose_y)
             if(goal.start_discovery):
@@ -230,6 +229,7 @@ class Discovery(Node):
             self.navigator.goToPose(self.navigator.getPoseStamped((start_pose_x,start_pose_y), goal.angle))
             while not self.navigator.isTaskComplete():
                         self.get_logger().info("Repositionating the robot before crossing entrance")
+            self.active = True
             self.start_navigation(goal.goal_pose_x, goal.goal_pose_y, goal.angle, start_pose_x, start_pose_y, self.n_points+2, self.spin_dist+10)
        
             
