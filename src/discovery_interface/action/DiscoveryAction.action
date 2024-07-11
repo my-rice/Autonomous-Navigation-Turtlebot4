@@ -3,6 +3,7 @@ float64 goal_pose_y
 float64 start_pose_x
 float64 start_pose_y
 float64 angle
+bool start_discovery
 ---
 string next_action
 ---

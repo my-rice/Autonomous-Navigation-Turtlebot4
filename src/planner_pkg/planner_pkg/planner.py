@@ -59,7 +59,7 @@ class DiscoveryActionClient(Node):
     def destroy(self):
         self.action_client.destroy()
         
-    def send_goal(self,goal_pose_x, goal_pose_y, start_pose_x, start_pose_y, angle):
+    def send_goal(self,goal_pose_x, goal_pose_y, start_pose_x, start_pose_y, angle, start_discovery):
         """" Implement the send_goal method. It prepares the goal message with the starting pose and the goal pose of the discovery and sends it to the action server."""
         goal_msg = DiscoveryAction.Goal()
         goal_msg.goal_pose_x = goal_pose_x
@@ -67,6 +67,7 @@ class DiscoveryActionClient(Node):
         goal_msg.start_pose_x = start_pose_x
         goal_msg.start_pose_y = start_pose_y
         goal_msg.angle = angle
+        goal_msg.start_discovery = start_discovery
         
         # wait for the action server to be ready
         self.action_client.wait_for_server()
@@ -159,10 +160,10 @@ class PlannerHandler(Node):
         self.state = States.STARTUP
 
         # Create a subscription to the kidnapped topic only after the initial pose has been set
-        self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
+        #self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
 
         # TOPIC FOR TESTING IN SIMULATION: to test the recovery mode, we need to kidnap the robot
-        #self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
+        self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
         
 
 
@@ -179,10 +180,10 @@ class PlannerHandler(Node):
         self.result = None
         self.last_kidnapped = False
         self.discovery_flag = False
-
+        self.start_discovery = True
+        self.first_action_payload = None
         # Build the map used by the planner to compute the next goal
         self.build_p_map()
-
         while self.initial_pose_flag == False: # TODO: Is it necessary to wait for the initial pose? In this way?
             self.get_logger().info("Please, set the initial pose ...")
             rclpy.spin_once(self, timeout_sec=1)
@@ -218,6 +219,8 @@ class PlannerHandler(Node):
         self.next_goal,self.last_goal = self.compute_first_goal(pose)
 
         approach_angle = self.get_approach_angle(self.next_goal, self.last_goal, orientation)
+        self.get_logger().info("The initial orientation is: " + str(orientation) + "and theta is: " + str(theta) + "and approach angle is: " + str(approach_angle))
+
         intersection_points, angle = self.get_intersection_points(self.next_goal, approach_angle, rho=self.rho)
         points = self.order_by_distance(intersection_points, x, y)
         self.action_payload = (points[1][0],points[1][1],angle)
@@ -299,6 +302,8 @@ class PlannerHandler(Node):
         for key, value in self.connections.items():
             coord_key = coordinates_lookup[key]
             self.map[coord_key] = [(coordinates_lookup[conn['point']], conn['direction']) for conn in value]
+   
+
 
     def compute_next_angle(self, current_angle, result):
         """Compute the next angle based on the result of the road sign. The angle is approximated to the nearest 90 degrees."""
@@ -313,6 +318,7 @@ class PlannerHandler(Node):
             current_angle -= 360
         if current_angle < 0:
             current_angle += 360
+
         return current_angle
     
     def action_result2goal(self,result, initial_pose, current_goal_pose):
@@ -367,7 +373,13 @@ class PlannerHandler(Node):
         
         # send the goal to the discovery action server and wait for the result
         self.navigator.clearAllCostmaps()
-        future_goal = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]))
+        if(self.first_action_payload is not None):
+            if(self.action_payload[0] != self.first_action_payload[0] or self.action_payload[1] != self.first_action_payload[1]):
+                self.start_discovery = False
+        else:
+            self.first_action_payload = self.action_payload
+
+        future_goal = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]), bool(self.start_discovery))
         self.get_logger().info("Waiting" + str(future_goal))
         while not future_goal.done():
             self.get_logger().info("Waiting for the result ... ")
@@ -459,7 +471,8 @@ class PlannerHandler(Node):
         ### Get the ideal relocation pose of the robot
 
         self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
-        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], rho=self.rho+1)
+        
+        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], rho=self.rho + 1)
         points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
         ideal_relocation = points[0]
         self.action_payload = (points[1][0],points[1][1],angle) # the action payload is the last point of the crossing where the robot has to search for the traffic sign
@@ -495,6 +508,16 @@ class PlannerHandler(Node):
             theta -= 360
         possible_goals = []
         possible_last_goals = []
+
+        if theta < 45 or theta >= 315: 
+            possible_neighbour = "south"
+        elif theta < 135:
+            possible_neighbour = "east"
+        elif theta < 225:
+            possible_neighbour = "north"
+        elif theta < 315:
+            possible_neighbour = "west"
+
         if theta < 45 or theta >= 315: 
             
             for x_m,y_m  in self.map.keys():
@@ -538,13 +561,24 @@ class PlannerHandler(Node):
                 next_goal = goal
                 last_goal = next_goal # CAMBIARE
         
+        neighbours = self.map[next_goal]
+        for neighbour in neighbours:
+            if(neighbour[1]==possible_neighbour):
+                last_goal = neighbour[0]
         # the last goal is the nearest goal to the robot
-        min_distance = float("inf")
-        for goal in possible_last_goals:
-            distance = (goal[0] - x) ** 2 + (goal[1] - y) ** 2
-            if distance < min_distance:
-                min_distance = distance
-                last_goal = goal
+        # min_distance = float("inf")
+        # for goal in possible_last_goals:
+        #     neighbors = self.map[next_goal]
+        #     for neighbor in neighbors:
+        #         if(goal == neighbor[0]):
+
+            
+
+
+        #     distance = (goal[0] - x) ** 2 + (goal[1] - y) ** 2
+        #     if distance < min_distance:
+        #         min_distance = distance
+        #         last_goal = goal
 
 
         return next_goal,last_goal
@@ -739,7 +773,7 @@ class PlannerHandler(Node):
         self.get_logger().info("The robot is on_recovery")
         
 
-        if self.first_discovery:
+        if self.first_discovery or self.start_discovery:
             self.navigator.setInitialPose(self.navigator.getPoseStamped(self.last_nav_goal[0:2], self.last_nav_goal[2]))
             self.plot_arrow_on_rviz(self.last_nav_goal[0:2], self.last_nav_goal[2])
         else:
@@ -755,7 +789,7 @@ class PlannerHandler(Node):
         
         self.get_logger().info("The robot has been relocated, the next goal is: " + str(self.next_goal) + " and the last goal is: " + str(self.nav_goal))
         
-        if self.first_discovery:
+        if self.first_discovery or self.start_discovery:
             self.navigator.setInitialPose(self.navigator.getPoseStamped(self.last_nav_goal[0:2], self.last_nav_goal[2]))
             self.state = States.FIRST_LOCALIZATION
         else:

@@ -214,16 +214,23 @@ class Discovery(Node):
             goal_handle.canceled()
             result.next_action = "Canceled"
             self.active = False
+
             return result
 
         if self.road_sign is None:
             self.active = True
             increment_x = (goal.goal_pose_x - goal.start_pose_x)
             increment_y = (goal.goal_pose_y - goal.start_pose_y)
-            self.navigator.goToPose(self.navigator.getPoseStamped(((goal.start_pose_x-increment_x/3),goal.start_pose_y-increment_y/3), goal.angle))
+            if(goal.start_discovery):
+                start_pose_x = goal.start_pose_x
+                start_pose_y = goal.start_pose_y
+            else:
+                start_pose_x = goal.start_pose_x-increment_x/3
+                start_pose_y = goal.start_pose_y-increment_y/3
+            self.navigator.goToPose(self.navigator.getPoseStamped((start_pose_x,start_pose_y), goal.angle))
             while not self.navigator.isTaskComplete():
                         self.get_logger().info("Repositionating the robot before crossing entrance")
-            self.start_navigation(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x-increment_x/3, goal.start_pose_y-increment_y/3, self.n_points+2, self.spin_dist+10)
+            self.start_navigation(goal.goal_pose_x, goal.goal_pose_y, goal.angle, start_pose_x, start_pose_y, self.n_points+2, self.spin_dist+10)
        
             
             self.get_logger().info("Ready to join navigation thread 2")
