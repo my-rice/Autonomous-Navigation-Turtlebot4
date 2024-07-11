@@ -160,10 +160,10 @@ class PlannerHandler(Node):
         self.state = States.STARTUP
 
         # Create a subscription to the kidnapped topic only after the initial pose has been set
-        #self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
+        self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
 
         # TOPIC FOR TESTING IN SIMULATION: to test the recovery mode, we need to kidnap the robot
-        self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
+        #self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
         
 
 
@@ -378,7 +378,7 @@ class PlannerHandler(Node):
                 self.start_discovery = False
         else:
             self.first_action_payload = self.action_payload
-
+        self.get_logger().info("GOALSSS: "+ str(self.action_payload[0]) + "AND" + str(self.action_payload[1]))
         future_goal = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]), bool(self.start_discovery))
         self.get_logger().info("Waiting" + str(future_goal))
         while not future_goal.done():
@@ -465,16 +465,22 @@ class PlannerHandler(Node):
         return theta
     
 
-    def relocate(self):
+    def relocate(self, relocation=None):
         """Relocate the robot to the ideal relocation point. The ideal relocation point is the intersection point of the robot with the circle centered in the last goal and with radius augmented by one."""
         self.get_logger().info("Relocating the robot")
         ### Get the ideal relocation pose of the robot
-
-        self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
         
-        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], rho=self.rho + 1)
+        self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
+        if(relocation is not None):
+            rho = self.rho
+        else:
+            rho = self.rho+1
+        points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], rho)
         points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
-        ideal_relocation = points[0]
+        if(relocation is not None):
+            ideal_relocation = relocation
+        else:
+            ideal_relocation = points[0]
         self.action_payload = (points[1][0],points[1][1],angle) # the action payload is the last point of the crossing where the robot has to search for the traffic sign
         self.navigator.setInitialPose(self.navigator.getPoseStamped(ideal_relocation, angle))
 
@@ -772,13 +778,17 @@ class PlannerHandler(Node):
     def on_recovery(self):
         self.get_logger().info("The robot is on_recovery")
         
-
-        if self.first_discovery or self.start_discovery:
+        relocation = None
+        if(self.start_discovery):
+            relocation = self.last_nav_goal[0:2]
+        if self.first_discovery:
             self.navigator.setInitialPose(self.navigator.getPoseStamped(self.last_nav_goal[0:2], self.last_nav_goal[2]))
             self.plot_arrow_on_rviz(self.last_nav_goal[0:2], self.last_nav_goal[2])
+            
         else:
-            point,angle = self.relocate()
+            point,angle = self.relocate(relocation)
             self.plot_arrow_on_rviz(point,angle)
+
 
 
         # wait for the kidnapped status to be False
@@ -789,11 +799,11 @@ class PlannerHandler(Node):
         
         self.get_logger().info("The robot has been relocated, the next goal is: " + str(self.next_goal) + " and the last goal is: " + str(self.nav_goal))
         
-        if self.first_discovery or self.start_discovery:
+        if self.first_discovery:
             self.navigator.setInitialPose(self.navigator.getPoseStamped(self.last_nav_goal[0:2], self.last_nav_goal[2]))
             self.state = States.FIRST_LOCALIZATION
         else:
-            self.relocate()
+            self.relocate(relocation)
             self.state = States.NAVIGATION
 
     def run(self):
