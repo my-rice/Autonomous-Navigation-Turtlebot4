@@ -9,7 +9,7 @@ Source code for the project work of Mobile Robots for Critical Missions.
 ## Requirements
 
 Python version: 3.10
-
+Python libraries for QReader: pyzbar, pytorch, qrdet, numpy
 
 ## How to launch
 
