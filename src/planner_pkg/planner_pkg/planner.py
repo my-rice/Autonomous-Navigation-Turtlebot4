@@ -159,10 +159,10 @@ class PlannerHandler(Node):
         self.state = States.STARTUP
 
         # Create a subscription to the kidnapped topic only after the initial pose has been set
-        #self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
+        self.kidnapped_sub = self.create_subscription(KidnapStatus, "/kidnap_status", self.kidnapped_callback, qos_reliable, callback_group=self.kidnap_group)
 
         # TOPIC FOR TESTING IN SIMULATION: to test the recovery mode, we need to kidnap the robot
-        self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
+        #self.test_sub = self.create_subscription(Bool, "/test", self.kidnapped_test_callback, 10, callback_group=self.kidnap_group)
         
 
 
@@ -528,12 +528,15 @@ class PlannerHandler(Node):
                     possible_last_goals.append((x_m,y_m))
 
         # the next goal is the nearest goal to the robot
+
+
         min_distance = float("inf")
         for goal in possible_goals:
             distance = (goal[0] - x) ** 2 + (goal[1] - y) ** 2
             if distance < min_distance:
                 min_distance = distance
                 next_goal = goal
+                last_goal = next_goal # CAMBIARE
         
         # the last goal is the nearest goal to the robot
         min_distance = float("inf")
@@ -791,7 +794,7 @@ class PlannerHandler(Node):
                 approach_angle = math.atan2(next_goal[1] - last_goal[1], next_goal[0] - last_goal[0]) * 180 / math.pi
         else:
             approach_angle = self.get_angle(current_orientation) # From the pose of the robot
-            approach_angle += self.compute_next_angle(self.result)
+            approach_angle = self.compute_next_angle(approach_angle,self.result)
             if approach_angle >= 360:
                 approach_angle -= 360
             
@@ -820,7 +823,7 @@ def main(args=None):
         planner.get_logger().info("The planner is shutting down")
     
     planner.destroy_node()
-    rclpy.shutdown()
+    #rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

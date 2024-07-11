@@ -74,36 +74,36 @@ class Discovery(Node):
             self.navigator.cancelTask()
             self.get_logger().info(msg.data)
 
-    # def plot_point_on_rviz(self,test_points):
-    #     """Plot the ideal relocation point on rviz."""
-    #     marker = self.marker
-    #     marker.header.frame_id = "map"
-    #     marker.header.stamp = self.get_clock().now().to_msg()
-    #     marker.ns = "test_points"
-    #     marker.type = Marker.POINTS  # Change marker type to POINTS
-    #     marker.action = Marker.ADD
+    def plot_point_on_rviz(self,test_points):
+        """Plot the ideal relocation point on rviz."""
+        marker = self.marker
+        marker.header.frame_id = "map"
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "test_points"
+        marker.type = Marker.POINTS  # Change marker type to POINTS
+        marker.action = Marker.ADD
 
-    #     points = []
-    #     for point in test_points:
-    #         p = Point()
-    #         p.x = point[0]
-    #         p.y = point[1]
-    #         self.get_logger().info(f"Point: {p.x}, {p.y}")
-    #         p.z = 0.0
-    #         points.append(p)
+        points = []
+        for point in test_points:
+            p = Point()
+            p.x = point[0]
+            p.y = point[1]
+            self.get_logger().info(f"Point: {p.x}, {p.y}")
+            p.z = 0.0
+            points.append(p)
 
-    #     marker.points = points
+        marker.points = points
 
-    #     marker.scale.x = 0.2  # Point width
-    #     marker.scale.y = 0.2  # Point height
+        marker.scale.x = 0.2  # Point width
+        marker.scale.y = 0.2  # Point height
 
-    #     # Set color for the points
-    #     marker.color.a = 1.0  # Transparency
-    #     marker.color.r = 1.0  # Red color
-    #     marker.color.g = 0.0  # Green color
-    #     marker.color.b = 0.0  # Blue color
+        # Set color for the points
+        marker.color.a = 1.0  # Transparency
+        marker.color.r = 1.0  # Red color
+        marker.color.g = 0.0  # Green color
+        marker.color.b = 0.0  # Blue color
 
-    #     self.publisher_marker.publish(marker)
+        self.publisher_marker.publish(marker)
 
 
     def goal_callback(self, goal_request):
@@ -138,9 +138,9 @@ class Discovery(Node):
         increment_x = (goal_x - start_x) / n_points
         increment_y = (goal_y - start_y) / n_points
         points = [(start_x + increment_x * i, start_y + increment_y * i, angle) for i in range(1, n_points)]
-
+        points_2 = [(start_x + increment_x * i, start_y + increment_y * i, angle) for i in range(0, n_points-1)]
         
-        # self.plot_point_on_rviz(points)
+        self.plot_point_on_rviz(points_2)
 
         return points
 
@@ -220,6 +220,9 @@ class Discovery(Node):
             self.active = True
             increment_x = (goal.goal_pose_x - goal.start_pose_x)
             increment_y = (goal.goal_pose_y - goal.start_pose_y)
+            self.navigator.goToPose(self.navigator.getPoseStamped(((goal.start_pose_x-increment_x/3),goal.start_pose_y-increment_y/3), goal.angle))
+            while not self.navigator.isTaskComplete():
+                        self.get_logger().info("Repositionating the robot before crossing entrance")
             self.start_navigation(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x-increment_x/3, goal.start_pose_y-increment_y/3, self.n_points+2, self.spin_dist+10)
        
             
@@ -240,9 +243,9 @@ class Discovery(Node):
         return result
 
     def on_image_read(self, msg):
-        self.get_logger().info("Callback image read")
+        # self.get_logger().info("Callback image read")
         if self.active and not self.found:
-            self.get_logger().info("Image received")
+            # self.get_logger().info("Image received")
 
             image_msg = msg
             cv_image = self._bridge.compressed_imgmsg_to_cv2(image_msg)
