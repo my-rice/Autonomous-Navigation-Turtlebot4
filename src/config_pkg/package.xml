@@ -3,9 +3,11 @@
 <package format="3">
   <name>config_pkg</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="g.intonti@studenti.unisa.it">giovanni</maintainer>
-  <license>TODO: License declaration</license>
+  <description>This package was defined to manage system configuration parameters</description>
+  <maintainer email="g.intonti@studenti.unisa.it">Giovanni Intonti</maintainer>
+
+
+  <license>GPLv3</license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

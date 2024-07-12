@@ -3,8 +3,8 @@
 <package format="3">
   <name>discovery_interface</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="g.intonti@studenti.unisa.it">giovanni</maintainer>
+  <description>The package was defined to manage the interfaces between the discovery and planning nodes.</description>
+  <maintainer email="g.intonti@studenti.unisa.it">Giovanni Intonti</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

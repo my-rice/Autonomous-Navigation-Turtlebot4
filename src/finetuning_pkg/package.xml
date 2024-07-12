@@ -3,9 +3,9 @@
 <package format="3">
   <name>finetuning_pkg</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="g.intonti@studenti.unisa.it">giovanni</maintainer>
-  <license>TODO: License declaration</license>
+  <description>fine-tuning of certain parameters of the system</description>
+  <maintainer email="g.intonti@studenti.unisa.it">Giovanni Intonti</maintainer>
+  <license>GPLv3</license>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

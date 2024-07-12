@@ -3,8 +3,8 @@
 <package format="3">
   <name>discovery_pkg</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="g.intonti@studenti.unisa.it">giovanni</maintainer>
+  <description>The discovery package is in charge of managing an exploration policy for the recognition of QR codes.</description>
+  <maintainer email="g.intonti@studenti.unisa.it">Giovanni Intonti</maintainer>
   <license>Apache-2.0</license>
 
   <test_depend>ament_copyright</test_depend>

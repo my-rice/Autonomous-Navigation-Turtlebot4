@@ -3,8 +3,8 @@
 <package format="3">
   <name>planner_pkg</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="dvdrsi2017@gmail.com">davide</maintainer>
+  <description>The planner package takes the role of global planner in our application.</description>
+  <maintainer email="d.risi2@studenti.unisa.it">Davide Risi</maintainer>
   <license>Apache-2.0</license>
 
   <test_depend>ament_copyright</test_depend>

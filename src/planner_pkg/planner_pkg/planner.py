@@ -25,8 +25,8 @@ from enum import Enum
 import time
 
 
-# create enun for states
 class States(Enum):
+    """Enum class for the states of the robot."""
     STARTUP = 0
     FIRST_LOCALIZATION = 1
     FIRST_NAVIGATION = 2
@@ -57,6 +57,7 @@ class DiscoveryActionClient(Node):
         self.action_client = ActionClient(self, DiscoveryAction, 'discovery_mode')
 
     def destroy(self):
+        """Destroy the action client."""
         self.action_client.destroy()
         
     def send_goal(self,goal_pose_x, goal_pose_y, start_pose_x, start_pose_y, angle, start_discovery):
@@ -83,10 +84,10 @@ class DiscoveryActionClient(Node):
         """Callback function for the goal response."""
         goal_handle = future.result()
         if not goal_handle.accepted:
-            self.get_logger().info('Goal rejected :(')
+            self.get_logger().info('Goal rejected')
             return
 
-        self.get_logger().info('Goal accepted :)')
+        self.get_logger().info('Goal accepted')
         self._goal_handle = goal_handle
 
     def cancel_goal(self):
@@ -116,18 +117,22 @@ class DiscoveryActionClient(Node):
 
 
     def wait_for_server(self, timeout_sec=1.0):
+        """Wait for the action server to be ready."""
         if(self.action_client.wait_for_server(timeout_sec)):
             return True
         return False
 
     def get_result_callback(self, future_handle):
+        """Callback function for the result of the action server."""
         result = future_handle.result().result
         self.get_logger().info('Result: {0}'.format(result.next_action))
         return result.next_action
 
 
 class PlannerHandler(Node):
-
+    """Class that handles the planner of the robot. The planner is responsible for computing the next goal of the robot based on the current pose 
+    of the robot and the result of the road sign. The planner is also responsible for handling the kidnapped mode and the recovery mode. 
+    The planner is implemented as a state machine."""
     def __init__(self):
         super().__init__("Info") # Init node
 
@@ -184,7 +189,7 @@ class PlannerHandler(Node):
         self.first_action_payload = None
         # Build the map used by the planner to compute the next goal
         self.build_p_map()
-        while self.initial_pose_flag == False: # TODO: Is it necessary to wait for the initial pose? In this way?
+        while self.initial_pose_flag == False: 
             self.get_logger().info("Please, set the initial pose ...")
             rclpy.spin_once(self, timeout_sec=1)
 
@@ -197,35 +202,40 @@ class PlannerHandler(Node):
             self.get_logger().info("Action server is ready")
         else:
             self.get_logger().info("Action server is not ready, shutting down...")
-            rclpy.shutdown() #TODO: raise exception and exit
+            rclpy.shutdown() 
             exit()
 
         # Start the timer for the planner that will run the main loop
-        self.get_logger().info("self.timer_period: " + str(self.timer_period))
+        self.get_logger().info("Timer_period: " + str(self.timer_period))
         self.timer = self.create_timer(timer_period_sec=self.timer_period, callback=self.run, callback_group=self.timer_mutual_exclusion_group)
 
     def destroy_node(self):
+        """Destroy the node and the action client."""
         self.navigator.destroy_node()
         self.discovery_action_client.destroy()
         rclpy.try_shutdown()
         super().destroy_node()
 
     def init_planner_internal_state(self):
+        """Initialize the internal state of the planner"""
         x = self.amcl_pose.pose.pose.position.x
         y = self.amcl_pose.pose.pose.position.y
         orientation = self.amcl_pose.pose.pose.orientation
         theta = self.get_angle(orientation)
         pose = (x, y, theta)
+        # Compute the first goal of the robot based on the current pose
         self.next_goal,self.last_goal = self.compute_first_goal(pose)
 
         approach_angle = self.get_approach_angle(self.next_goal, self.last_goal, orientation)
         self.get_logger().info("The initial orientation is: " + str(orientation) + "and theta is: " + str(theta) + "and approach angle is: " + str(approach_angle))
 
+        # Compute the navigation goal based on the approach angle 
         intersection_points, angle = self.get_intersection_points(self.next_goal, approach_angle, rho=self.rho)
         points = self.order_by_distance(intersection_points, x, y)
         self.action_payload = (points[1][0],points[1][1],angle)
         self.nav_goal = (points[0][0], points[0][1], angle)
-
+        
+        # Set the last navigation goal to the current pose of the robot
         self.last_nav_goal = pose
 
 
@@ -260,20 +270,14 @@ class PlannerHandler(Node):
 
     def kidnapped_callback(self, msg):
         """Callback function for the kidnapped topic. It updates the kidnapped status of the robot, and it handles the kidnapped mode. This is a part of the recovery mode."""
-        # self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
         if msg.is_kidnapped == True and self.last_kidnapped == False:
-            # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
             self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))
             self.is_kidnapped = msg.is_kidnapped
-            # self.abort() # abort the current goal
-            # self.get_logger().info("ABORTED 2")
-            # self.plot_point_on_rviz()
+            
 
         if msg.is_kidnapped == False and self.last_kidnapped == True:
-            self.get_logger().info("The robot is deployed")
-            # self.relocate()     
-            self.is_kidnapped = msg.is_kidnapped # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
-            # self.timer.reset()
+            self.get_logger().info("The robot is deployed") 
+            self.is_kidnapped = msg.is_kidnapped # Only after the robot has been placed on the ground, then we can set the flag to false
         
         self.last_kidnapped = self.is_kidnapped
 
@@ -281,18 +285,17 @@ class PlannerHandler(Node):
         """Callback function that behave the same as kidnapped_callback. It is used only for testing in simulation."""
         self.get_logger().info("Kidnapped status: " + str(self.is_kidnapped))
         if msg.data == True and self.last_kidnapped == False:
-            # if the robot has been kidnapped, then we need to restart the navigation from a specific point. This is not a proper way to handle the kidnapped mode but it is a recovery mode by kidnapping the robot
             self.get_logger().info("The robot is in kidnapped mode, the last_nav_goal is:" + str(self.last_nav_goal) + " and the last goal is: " + str(self.last_goal))            
             self.is_kidnapped = msg.data
 
         if msg.data == False and self.last_kidnapped == True:
             self.get_logger().info("The robot is deployed")
-            self.is_kidnapped = msg.data # ONLY AFTER THE ROBOT HAS BEEN RELOCATED, THEN WE CAN SET THE FLAG TO FALSE
+            self.is_kidnapped = msg.data 
         
         self.last_kidnapped = self.is_kidnapped
 
     def build_p_map(self):
-        """Build the map used by the planner to compute the next goal. The map is a dictionary where the key is the coordinates of the node and the value is a list of tuples. Each tuple contains the coordinates of the neighbor node and the direction to reach the neighbor node."""
+        """Build the map used by the planner to compute the next goal. The map is a dictionary where the key is the coordinates of the node and the value is a list of tuples. Each tuple contains the coordinates of the neighbour node and the direction to reach the neighbour node."""
         self.get_logger().info("Building the map")
         
         self.map = dict()
@@ -323,12 +326,14 @@ class PlannerHandler(Node):
     
     def action_result2goal(self,result, initial_pose, current_goal_pose):
         """Compute the next goal based on the result of the road sign. The goal is a node in the map."""
+        # Given the previous goal pose we want to compute the next goal pose based on the result of the road sign
         next_goal_angle = initial_pose[2]
         self.get_logger().info("The initial pose is: " + str(initial_pose))
         self.get_logger().info("THe result is: " + result)
 
         next_goal_angle = self.compute_next_angle(next_goal_angle, result)
 
+        # Here we convert the angle to the cardinal direction
         if next_goal_angle < 45 or next_goal_angle >= 315: 
             next_goal_angle = "north"
         elif next_goal_angle < 135:
@@ -338,13 +343,14 @@ class PlannerHandler(Node):
         elif next_goal_angle < 315:
             next_goal_angle = "east"
 
-
+        # Based on the cardinal direction, we loop for the neighbors of the current goal pose and we choose the next goal if exists
         neighbors = self.map[current_goal_pose]
         for neighbor in neighbors:
             if neighbor[1] == next_goal_angle:
                 self.get_logger().info("The next goal is: " + str(neighbor[0]) + ", given that the robot is in the pose: " + str(initial_pose) + " and the result is: " + result)
                 return neighbor[0]
         
+        # If the next goal does not exist, then we raise an exception
         raise GoalNotValidException("The goal is not valid, the road sign is: " + result + " the robot pose is (" + str(initial_pose[0]) + ", " + str(initial_pose[1]) + ", " + str(initial_pose[2]) + ") and the goal is (" + str(current_goal_pose[0]) + ", " + str(current_goal_pose[1]) + ")"+ " the neighbors are: " + str(neighbors)+ " the next goal angle is: " + str(next_goal_angle))
 
     def order_by_distance(self, intersection_points, x, y):
@@ -359,30 +365,28 @@ class PlannerHandler(Node):
             return intersection_points[::-1] # reverse the list
 
     def discovery_mode(self,current_pose):
-        """Discovery mode of the robot. The robot is in discovery mode when it is searching for the road sign. 
+        """Discovery mode of the robot. The robot is in discovery state when it is searching for the road sign. 
         This method sends the goal to the discovery action server and waits for the result. The result is the 
-        action that the robot has to perform based on the road sign. This method also handles the first discovery 
-        mode."""
-        self.get_logger().info("The robot is in discovery mode")
-        
-        # x = current_pose[0]
-        # y = current_pose[1]
-        # theta = current_pose[2]
+        action that the robot has to perform based on the road sign."""
+        self.get_logger().info("The robot is running the discovery mode method")
+      
         x= self.nav_goal[0]
         y= self.nav_goal[1]
-        
-        self.get_logger().info("sending the goal to the discovery action server: " + str(self.action_payload) + " and the current pose is: " + str(current_pose))
-        
-        # send the goal to the discovery action server and wait for the result
+
+        # Clear the costmaps
         self.navigator.clearAllCostmaps()
+
+        # Check if this is the first discovery mode, if so, then enable the start_discovery flag. Briefly, the start_discovery is used
+        # to tell the action server that he should not compute the backup policy moving the robot behind but it should do it only augmenting
+        # the intermediate points
         if(self.first_action_payload is not None):
             if(self.action_payload[0] != self.first_action_payload[0] or self.action_payload[1] != self.first_action_payload[1]):
                 self.start_discovery = False
         else:
             self.first_action_payload = self.action_payload
-        self.get_logger().info("GOALSSS: "+ str(self.action_payload[0]) + "AND" + str(self.action_payload[1]))
+
+        # Send the goal to the discovery action server and wait for the result
         future_goal = self.discovery_action_client.send_goal(float(self.action_payload[0]), float(self.action_payload[1]), float(x), float(y), float(self.action_payload[2]), bool(self.start_discovery))
-        self.get_logger().info("Waiting" + str(future_goal))
         while not future_goal.done():
             self.get_logger().info("Waiting for the result ... ")
             rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
@@ -394,9 +398,9 @@ class PlannerHandler(Node):
 
         recovery_flag = False
 
-        while not get_result_future.done() and not get_result_future.cancelled(): #and not recovery_flag:
-            #self.get_logger().info("done: " + str(get_result_future.done()) + " cancelled: " + str(get_result_future.cancelled()))
+        while not get_result_future.done() and not get_result_future.cancelled(): 
             
+            # Check if the robot is kidnapped
             if self.is_kidnapped:
                 # cancel the current goal
                 self.get_logger().info("The robot is kidnapped, canceling the current goal")
@@ -406,18 +410,19 @@ class PlannerHandler(Node):
             
             self.get_logger().info("Waiting for the result:")
             rclpy.spin_once(self.discovery_action_client, timeout_sec=0.5)
-
+        # Get the result of the action server
         result = get_result_future.result().result.next_action
+
+        # Clear the costmaps
         self.navigator.clearAllCostmaps()
 
         return result
         
     def get_intersection_points(self, next_goal, approach_angle, rho=3):
         """Compute the intersection points of the robot with the circle centered in the next goal and with radius rho.
-          The intersection points are computed based on the approach angle of the robot. The approach angle is 
-          the angle between two consecutive angles. The intersection points are the most significant points of the 
-          circle, which are calculated by intersecting the circle with the line between the two goals. 
-          The intersection points are ordered by distance from the robot."""
+          The intersection points are computed based on the approach angle of the robot, usually computed by the get_approach_angle method.
+          The intersection points are the most significant points of the circle, which are calculated by intersecting the circle with the line between 
+          the two goals. The intersection points are ordered by distance from the robot."""
         x1,y1 = next_goal
         xc, yc = next_goal
         
@@ -453,7 +458,7 @@ class PlannerHandler(Node):
         y_intersect1 = m * x_intersect1 + q
         y_intersect2 = m * x_intersect2 + q
 
-        # The intersection points
+        # Return the intersection points
         intersection_points = [(x_intersect1,y_intersect1), (x_intersect2, y_intersect2)]
         return intersection_points, approach_angle
 
@@ -468,17 +473,21 @@ class PlannerHandler(Node):
     
 
     def relocate(self, relocation=None):
-        """Relocate the robot to the ideal relocation point. The ideal relocation point is the intersection point of the robot with the circle centered in the last goal and with radius augmented by one."""
+        """Relocate the robot to the ideal relocation point. The ideal relocation point is the intersection point of the robot with 
+        the circle centered in the last goal and with radius augmented by one. If relocation is not None, then the ideal relocation point is the
+        relocation point itself"""
         self.get_logger().info("Relocating the robot")
-        ### Get the ideal relocation pose of the robot
         
         self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
         if(relocation is not None):
             rho = self.rho
         else:
             rho = self.rho+1
+
         points, angle = self.get_intersection_points(self.last_goal,self.last_nav_goal[2], rho)
         points = self.order_by_distance(points, self.last_nav_goal[0], self.last_nav_goal[1])
+
+        ### Get the ideal relocation pose of the robot
         if(relocation is not None):
             ideal_relocation = relocation
         else:
@@ -492,23 +501,9 @@ class PlannerHandler(Node):
         return ideal_relocation, angle
         
 
-    # def abort(self):
-    #     # Cancel the current goal
-    #     self.timer.cancel()
-    #     self.get_logger().info("Aborting the current goal")
-    #     self.get_logger().info("The last goal is: " + str(self.last_goal) + " and the last nav goal is: " + str(self.last_nav_goal) + " and the next goal is: " + str(self.next_goal))
-        
-    #     if self.nav_thread is not None:
-    #         self.navigator.cancelTask()
-    #         self.get_logger().info(" NAV THREAD ACTIVE ")
-    #         self.nav_thread.join()
-    #         self.nav_thread = None
-    #         #self.flag = True
-    #         #self.discovery_flag = False
-    #     self.discovery_action_client.cancel_goal()
-
     def compute_first_goal(self, pose):
-        """Compute the first goal of the robot. The first goal is the nearest goal to the robot based on the robot's orientation and given the characteristics of the map. The last goal is the goal that it is located behind the robot."""
+        """Compute the first goal of the robot. The first goal is the nearest goal to the robot based on the robot's orientation and given 
+        the characteristics of the map. The last goal is the goal that it is located behind the robot."""
         x, y, theta = pose
         if(theta<0):
             theta += 360
@@ -517,6 +512,7 @@ class PlannerHandler(Node):
         possible_goals = []
         possible_last_goals = []
 
+        # given the orientation of the robot, we can compute the possible neighbors of the robot based on the cardinal direction
         if theta < 45 or theta >= 315: 
             possible_neighbour = "south"
         elif theta < 135:
@@ -559,56 +555,40 @@ class PlannerHandler(Node):
                     possible_last_goals.append((x_m,y_m))
 
         # the next goal is the nearest goal to the robot
-
-
         min_distance = float("inf")
         for goal in possible_goals:
             distance = (goal[0] - x) ** 2 + (goal[1] - y) ** 2
             if distance < min_distance:
                 min_distance = distance
                 next_goal = goal
-                last_goal = next_goal # CAMBIARE
+                last_goal = next_goal 
         
+        # the last goal is the neighbour of the next goal in the opposite direction of the robot, if it doesn't exist, then the last goal is the next goal
         neighbours = self.map[next_goal]
         for neighbour in neighbours:
             if(neighbour[1]==possible_neighbour):
                 last_goal = neighbour[0]
-        # the last goal is the nearest goal to the robot
-        # min_distance = float("inf")
-        # for goal in possible_last_goals:
-        #     neighbors = self.map[next_goal]
-        #     for neighbor in neighbors:
-        #         if(goal == neighbor[0]):
-
-            
-
-
-        #     distance = (goal[0] - x) ** 2 + (goal[1] - y) ** 2
-        #     if distance < min_distance:
-        #         min_distance = distance
-        #         last_goal = goal
-
 
         return next_goal,last_goal
 
-    # def start_navigation(self, x, y, angle=0):
-    #     self.navigator.startToPose(self.navigator.getPoseStamped((x, y), angle))
+
 
     def on_startup(self):
-        # Initialize the variables for the planner used in the run method
+        """Startup state of the planner. The planner is in the startup state when the node is initialized. 
+        Initialize the variables for the planner used in the run method."""
         self.get_logger().info("The robot is on_startup")
         self.init_planner_internal_state()
         
         self.state = States.FIRST_LOCALIZATION
 
     def on_first_localization(self):
+        """First localization state of the planner."""
         self.get_logger().info("The robot is on_first_localization")
         x = self.amcl_pose.pose.pose.position.x
         y = self.amcl_pose.pose.pose.position.y
         theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
         pose = (x, y, theta)
         distance_to_goal = math.sqrt((self.next_goal[0] - x) ** 2 + (self.next_goal[1] - y) ** 2)
-        self.get_logger().info("The distance to the goal is: " + str(distance_to_goal) + "and x is: " + str(x) + " and y is: " + str(y) + " and the goal is: " + str(self.next_goal))
         if distance_to_goal > self.rho:
             # if the robot is too far from the goal, then we need to approach the goal
             self.state = States.FIRST_NAVIGATION
@@ -617,6 +597,7 @@ class PlannerHandler(Node):
             self.state = States.DISCOVERY
 
     def on_first_navigation(self):
+        """First navigation state of the planner. The robot is in the first navigation state when it is approaching the first goal."""
         self.get_logger().info("The robot is on_first_navigation")
         x, y ,angle= map(float, self.nav_goal)
         
@@ -627,7 +608,7 @@ class PlannerHandler(Node):
         
         self.navigator.goToPose(self.navigator.getPoseStamped((x, y), angle))
         while not self.navigator.isTaskComplete():
-            self.get_logger().info("Waiting for first navigation task completion")
+            self.get_logger().info("Waiting for first navigation task completion...")
             if self.is_kidnapped:
                 # cancel the current goal
                 self.navigator.cancelTask()
@@ -643,11 +624,12 @@ class PlannerHandler(Node):
 
 
     def on_discovery(self):
+        """Discovery state of the planner. The robot is in the discovery state when it is searching for the road sign."""
         self.get_logger().info("The robot is on_discovery")
 
 
         if self.is_kidnapped:
-            # transition to the recovery mode, here is safe.
+            # transition to the recovery mode, here is safe to transit to the recovery state
             self.state = States.RECOVERY
             return
 
@@ -658,7 +640,6 @@ class PlannerHandler(Node):
         theta = self.get_angle(self.amcl_pose.pose.pose.orientation)
         pose = (x, y, theta)
 
-        # NOTE: Updating the last goal and the last navigation goal is THE only dangerous operation in the planner, considering that the robot can be kidnapped at any time.
         self.last_goal = self.next_goal # save the last goal
         self.last_nav_goal = self.nav_goal # save the last navigation goal
 
@@ -670,7 +651,7 @@ class PlannerHandler(Node):
             return
 
 
-        self.get_logger().info("RESULT: " + str(self.result))
+        self.get_logger().info("Result received: " + str(self.result))
         
         # if the result is stop, then it means that the robot has reached the final goal
         if self.result == "stop":
@@ -699,49 +680,52 @@ class PlannerHandler(Node):
         self.nav_goal = (points[0][0], points[0][1], angle)
         self.action_payload = (points[1][0],points[1][1],angle)
 
-        
+        # transition to the navigation state
         self.state = States.NAVIGATION
             
 
 
     def on_navigation(self):
+        """Navigation state of the planner. The robot is in the navigation state when it is moving towards the next goal."""
         self.get_logger().info("The robot is on_navigation")
 
 
         if self.is_kidnapped:
-            # transition to the recovery mode
+            # transition to the recovery mode, here is safe to transit to the recovery state
             self.state = States.RECOVERY
             return
 
 
-        self.get_logger().info("THe nav goal is: " + str(self.nav_goal))
-        #self.get_logger().info("THe action payload is: " + str(self.action_payload))
+        self.get_logger().info("The nav goal is: " + str(self.nav_goal))
         self.get_logger().info(f"\n***********\nNEXT GOAL: {self.next_goal}\n***********")
 
-        # Start the navigation in a separate thread
         x, y ,angle= map(float, self.nav_goal)
 
-
+        # if the robot is too far from the goal, then we need to approach the goal in an asynchronous way
         self.navigator.goToPose(self.navigator.getPoseStamped((x, y), angle))
+        # wait until the robot reaches the goal
         while not self.navigator.isTaskComplete():
-            self.get_logger().info("Waiting for navigation task completion")
+            self.get_logger().info("Waiting for navigation task completion...")
             if self.is_kidnapped:
                 # cancel the current goal
                 self.navigator.cancelTask()
                 self.state = States.RECOVERY
                 return
 
+        # transition to the discovery state
         self.state = States.DISCOVERY
 
 
     def on_stop(self):
+        """Stop state of the planner. The robot is in the stop state when it has reached the final goal."""
         self.get_logger().info("The robot in on_stop")
         raise ExitException("The robot has reached the final goal")
 
     def plot_arrow_on_rviz(self, ideal_relocation, angle):
+        """Plot the arrow on rviz that indicates the relocation angle of the robot. The arrow is plotted based on the ideal relocation point and the angle."""
         # Calculate endpoint of the arrow based on angle
         self.get_logger().info("Plotting the point on rviz")
-        arrow_length = 1.0  # Length of the arrow (adjust as needed)
+        arrow_length = 1.0  # Length of the arrow
         end_point = Point()
         end_point.x = ideal_relocation[0] + arrow_length * math.cos(math.radians(angle))
         end_point.y = ideal_relocation[1] + arrow_length * math.sin(math.radians(angle))
@@ -763,24 +747,24 @@ class PlannerHandler(Node):
 
         arrow_marker.points = [start_point, end_point]
 
-        # Set the scale of the arrow (shaft diameter, head diameter, head length)
         arrow_marker.scale.x = 0.05  # Shaft diameter
         arrow_marker.scale.y = 0.1   # Head diameter
         arrow_marker.scale.z = 0.1   # Head length
 
-        # Set the color of the arrow
         arrow_marker.color.a = 1.0  # Transparency
         arrow_marker.color.r = 1.0  # Red color
         arrow_marker.color.g = 0.0  # Green color
         arrow_marker.color.b = 0.0  # Blue color
 
-        # Publish the arrow marker
         self.publisher_marker.publish(arrow_marker)
 
 
     def on_recovery(self):
+        """Recovery state of the planner. The robot is in the recovery state when it is recovering from the kidnapped mode."""
         self.get_logger().info("The robot is on_recovery")
         
+        # If is the first discovery, then the robot has to relocate to the last navigation goal, not behind. This is done just to visualize
+        # the robot position or Rviz
         relocation = None
         if(self.start_discovery):
             relocation = self.last_nav_goal[0:2]
@@ -797,11 +781,11 @@ class PlannerHandler(Node):
         # wait for the kidnapped status to be False
         while self.is_kidnapped:
             self.get_logger().info("The robot is in kidnapped mode, waiting for the robot to be deployed")
-            #rclpy.spin_once(self, timeout_sec=1)
             time.sleep(1)
         
         self.get_logger().info("The robot has been relocated, the next goal is: " + str(self.next_goal) + " and the last goal is: " + str(self.nav_goal))
         
+        # Here the relocation is done and the robot is ready to start
         if self.first_discovery:
             self.navigator.setInitialPose(self.navigator.getPoseStamped(self.last_nav_goal[0:2], self.last_nav_goal[2]))
             self.state = States.FIRST_LOCALIZATION
@@ -810,6 +794,7 @@ class PlannerHandler(Node):
             self.state = States.NAVIGATION
 
     def run(self):
+        """Run method of the planner. The run method is responsible for executing the state machine of the planner."""
 
         self.get_logger().info("The robot is in the state: " + str(self.state))
 
@@ -831,7 +816,6 @@ class PlannerHandler(Node):
             # Handle unknown state
             raise ValueError("Unknown state: " + str(self.state))
         
-        #self.get_logger().info("run method completed")
                 
 
 
@@ -839,7 +823,7 @@ class PlannerHandler(Node):
         """Compute the approach angle to the next goal. The approach angle is the angle between the line connecting the last goal and the next goal and the x-axis of the map."""
         if last_goal != next_goal:
                 approach_angle = math.atan2(next_goal[1] - last_goal[1], next_goal[0] - last_goal[0]) * 180 / math.pi
-        else:
+        else: # it happens when the robot has no initial last goal
             approach_angle = self.get_angle(current_orientation) # From the pose of the robot
             approach_angle = self.compute_next_angle(approach_angle,self.result)
             if approach_angle >= 360:
@@ -867,10 +851,9 @@ def main(args=None):
     except ExitException as e:
         planner.get_logger().info("The robot has reached the final goal")
     finally:
-        planner.get_logger().info("The planner is shutting down")
+        planner.get_logger().info("The planner is shutting down...")
     
     planner.destroy_node()
-    #rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

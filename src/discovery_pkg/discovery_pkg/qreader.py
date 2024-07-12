@@ -1,5 +1,5 @@
 """
-This class implements a robust QR detector & decoder. This detector is based on YOLOv7 model on the side
+This class implements a robust QR detector & decoder. This detector is based on YOLOv8 model on the side
 of the detection and pyzbar on the side of the decoder. It also implements different image preprocessing
 techniques. This detector will transparently combine all these techniques to maximize the detection rate
 on difficult images.
