@@ -365,9 +365,11 @@ class PlannerHandler(Node):
         mode."""
         self.get_logger().info("The robot is in discovery mode")
         
-        x = current_pose[0]
-        y = current_pose[1]
-        theta = current_pose[2]
+        # x = current_pose[0]
+        # y = current_pose[1]
+        # theta = current_pose[2]
+        x= self.nav_goal[0]
+        y= self.nav_goal[1]
         
         self.get_logger().info("sending the goal to the discovery action server: " + str(self.action_payload) + " and the current pose is: " + str(current_pose))
         
@@ -692,7 +694,7 @@ class PlannerHandler(Node):
         # compute the angolar coefficient of the line that connects the next goal to the last goal. This will be the approach angle to the next goal
         approach_angle = self.get_approach_angle(self.next_goal, self.last_goal, self.amcl_pose.pose.pose.orientation)
         
-        intersection_points, angle = self.get_intersection_points(self.next_goal, approach_angle)
+        intersection_points, angle = self.get_intersection_points(self.next_goal, approach_angle, self.rho)
         points = self.order_by_distance(intersection_points, x, y)
         self.nav_goal = (points[0][0], points[0][1], angle)
         self.action_payload = (points[1][0],points[1][1],angle)

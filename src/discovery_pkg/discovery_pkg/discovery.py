@@ -224,13 +224,15 @@ class Discovery(Node):
                 start_pose_x = goal.start_pose_x
                 start_pose_y = goal.start_pose_y
             else:
-                start_pose_x = goal.start_pose_x-increment_x/3
-                start_pose_y = goal.start_pose_y-increment_y/3
+                start_pose_x = goal.start_pose_x-increment_x/4
+                start_pose_y = goal.start_pose_y-increment_y/4
             self.navigator.goToPose(self.navigator.getPoseStamped((start_pose_x,start_pose_y), goal.angle))
             while not self.navigator.isTaskComplete():
                         self.get_logger().info("Repositionating the robot before crossing entrance")
             self.active = True
-            self.start_navigation(goal.goal_pose_x, goal.goal_pose_y, goal.angle, start_pose_x, start_pose_y, self.n_points+2, self.spin_dist+10)
+            goal_pose_x = goal.goal_pose_x-increment_x/6
+            goal_pose_y = goal.goal_pose_y-increment_y/6
+            self.start_navigation(goal_pose_x, goal_pose_y, goal.angle, start_pose_x, start_pose_y, self.n_points+1, self.spin_dist+10)
        
             
             self.get_logger().info("Ready to join navigation thread 2")
