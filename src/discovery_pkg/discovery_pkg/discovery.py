@@ -205,6 +205,8 @@ class Discovery(Node):
 
         self.found = False
         self.road_sign = None
+        self.get_logger().info("goal_pose: "+str(goal.goal_pose_x)+", "+str(goal.goal_pose_y) + " start_pose: "+str(goal.start_pose_x)+", "+str(goal.start_pose_y))
+
         self.start_navigation(goal.goal_pose_x, goal.goal_pose_y, goal.angle, goal.start_pose_x, goal.start_pose_y, self.n_points, self.spin_dist)
         
         self.active = False
@@ -226,12 +228,18 @@ class Discovery(Node):
             else:
                 start_pose_x = goal.start_pose_x-increment_x/4
                 start_pose_y = goal.start_pose_y-increment_y/4
+            
+            self.is_navigating = True
             self.navigator.goToPose(self.navigator.getPoseStamped((start_pose_x,start_pose_y), goal.angle))
             while not self.navigator.isTaskComplete():
-                        self.get_logger().info("Repositionating the robot before crossing entrance")
+                self.get_logger().info("Repositionating the robot before crossing entrance")
+            self.is_navigating = False
             self.active = True
             goal_pose_x = goal.goal_pose_x-increment_x/6
             goal_pose_y = goal.goal_pose_y-increment_y/6
+
+            self.get_logger().info("goal_pose: "+str(goal_pose_x)+", "+str(goal_pose_y) + " start_pose: "+str(start_pose_x)+", "+str(start_pose_y) + " increment_x: "+str(increment_x) + " increment_y: "+str(increment_y))
+
             self.start_navigation(goal_pose_x, goal_pose_y, goal.angle, start_pose_x, start_pose_y, self.n_points+1, self.spin_dist+10)
        
             
