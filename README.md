@@ -29,4 +29,6 @@ ros2 launch planner_pkg planner_launch.py
 ```
 If the task should be performed in a simulation environment, the gazebo simulator will be used, by launching:
 
-????? TODO: Not working map in gazebo
+ros2 launch diem_gazebo turtlebot4_ignition_no_dock.launch.py x:=-6.3 y:=0.0 world:=diem_map
+
+When all the nodes are up, to start the navigation just estimate the initial pose on Rviz.
