@@ -24,3 +24,11 @@ If the task should be performed in a simulation environment, the gazebo simulato
 ``` ros2 launch diem_gazebo turtlebot4_ignition_no_dock.launch.py x:=-6.3 y:=0.0 world:=diem_map ```
 
 When all the nodes are up, use Rviz2 to estimate the initial pose and then the navigation will start.
+
+## Video Example
+
+
+
+
+https://github.com/user-attachments/assets/bb4c342b-8148-4e41-a206-4988f7ee03f8
+
