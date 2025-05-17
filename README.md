@@ -16,7 +16,9 @@ sudo apt-get install zbar-tools
 
 First of all the localization, nav2 and rviz node should be brought up, by using the startup launch file created:
 
-``` ros2 launch planner_pkg startup_launch.py ```
+``` 
+ros2 launch planner_pkg startup_launch.py
+```
 
 And if all the nodes are started correctly, the discovery and planner package are needed to correctly solve the task:
 
