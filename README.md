@@ -6,11 +6,7 @@ Source code for the project work of Mobile Robots for Critical Missions.
 
 Python version: 3.10 <br />
 Python libraries for `QReader`: `pyzbar`, `pytorch`, `qrdet`, `numpy` <br />
-Python software suite for `QReader`: `zbar-tools`, to install through the following command:
-
-``` 
-sudo apt-get install zbar-tools
-```
+Python software suite for `QReader`: `zbar-tools`. <br />
 
 ## How to launch
 
