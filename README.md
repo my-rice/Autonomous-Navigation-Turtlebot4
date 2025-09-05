@@ -26,6 +26,11 @@ This repository integrates perception, exploration, mission logic and simulation
 
 ---
 
+## 📹 Demo Video
+https://github.com/user-attachments/assets/bb4c342b-8148-4e41-a206-4988f7ee03f8
+
+---
+
 ## 🧱 Package Overview
 
 Each ROS 2 package is cleanly separated:
@@ -187,11 +192,6 @@ Use `--packages-select` to iterate quickly. Add new parameters under `config_pkg
 - [ ] Multi-floor or multi-zone map switching  
 - [ ] Metrics node (coverage %, time-to-detect)  
 - [ ] Behavior Tree XML for mission sequencing  
-
----
-
-## 📹 Demo Video
-https://github.com/user-attachments/assets/bb4c342b-8148-4e41-a206-4988f7ee03f8
 
 ---
 
